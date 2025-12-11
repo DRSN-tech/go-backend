@@ -8,7 +8,7 @@ type Category struct {
 	Name      string
 	CreatedAt time.Time
 	UpdatedAt *time.Time
-	IsActive  bool
+	IsArchive bool
 }
 
 func NewCategory(name string) *Category {

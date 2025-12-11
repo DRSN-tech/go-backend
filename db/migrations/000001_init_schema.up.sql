@@ -1,0 +1,18 @@
+CREATE TABLE IF NOT EXISTS categories(
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(128) UNIQUE NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP,
+    is_archived BOOLEAN DEFAULT false
+);
+
+CREATE TABLE IF NOT EXISTS types_products(
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(128) UNIQUE NOT NULL,
+    price BIGINT NOT NULL,
+    category_id BIGINT NOT NULL REFERENCES categories(id) ON DELETE RESTRICT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP,
+    is_archived BOOLEAN DEFAULT false
+);
+
