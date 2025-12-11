@@ -10,7 +10,7 @@ type ProductType struct {
 	CategoryID int64
 	CreatedAt  time.Time
 	UpdatedAt  *time.Time
-	IsActive   bool
+	IsArchive  bool
 }
 
 func NewProductType(name string, price int64, categoryID int64) *ProductType {
