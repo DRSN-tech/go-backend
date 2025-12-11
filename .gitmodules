@@ -1,0 +1,4 @@
+[submodule "internal/proto"]
+	path = internal/proto
+	url = https://github.com/DRSN-tech/contracts
+    branch = master
