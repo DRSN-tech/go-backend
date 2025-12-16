@@ -4,11 +4,11 @@ import "time"
 
 // Category описывает категорию продукта
 type Category struct {
-	ID        int64
-	Name      string
-	CreatedAt time.Time
-	UpdatedAt *time.Time
-	IsArchive bool
+	ID         int64
+	Name       string
+	CreatedAt  time.Time
+	UpdatedAt  *time.Time
+	IsArchived bool
 }
 
 func NewCategory(name string) *Category {
