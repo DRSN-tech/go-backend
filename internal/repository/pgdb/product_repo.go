@@ -14,14 +14,14 @@ import (
 	"github.com/jimlawless/whereami"
 )
 
-// ProductTypeRepo реализует репозиторий типов продуктов поверх PostgreSQL.
-type ProductTypeRepo struct {
+// ProductRepo реализует репозиторий продуктов поверх PostgreSQL.
+type ProductRepo struct {
 	pool *pgxpool.Pool
-	conv converter.ProductTypeConverter
+	conv converter.ProductConverter
 }
 
-func NewProductTypeRepo(pool *pgxpool.Pool, conv converter.ProductTypeConverter) *ProductTypeRepo {
-	return &ProductTypeRepo{
+func NewProductRepo(pool *pgxpool.Pool, conv converter.ProductConverter) *ProductRepo {
+	return &ProductRepo{
 		pool: pool,
 		conv: conv,
 	}
@@ -29,7 +29,7 @@ func NewProductTypeRepo(pool *pgxpool.Pool, conv converter.ProductTypeConverter)
 
 // Upsert идемпотентно создаёт или обновляет продукт по уникальному имени,
 // Запись обновляется только при изменении цены или категории.
-func (p *ProductTypeRepo) Upsert(ctx context.Context, product *domain.ProductType) (*domain.ProductType, error) {
+func (p *ProductRepo) Upsert(ctx context.Context, product *domain.Product) (*domain.Product, error) {
 	tx, err := tr.TxFromCtx(ctx)
 	if err != nil {
 		return nil, e.Wrap(whereami.WhereAmI(), err)
@@ -38,7 +38,7 @@ func (p *ProductTypeRepo) Upsert(ctx context.Context, product *domain.ProductTyp
 	// VALUES ($1, $2, $3) name, price, category_id
 	query := `
 		WITH upsert AS (
-		INSERT INTO product_types (name, price, category_id)
+		INSERT INTO products (name, price, category_id)
 		VALUES ($1, $2, $3)
 		ON CONFLICT (name)
 		DO UPDATE SET
@@ -46,8 +46,8 @@ func (p *ProductTypeRepo) Upsert(ctx context.Context, product *domain.ProductTyp
 			category_id = EXCLUDED.category_id,
 			updated_at = NOW()
 		WHERE
-			product_types.price IS DISTINCT FROM EXCLUDED.price OR
-			product_types.category_id IS DISTINCT FROM EXCLUDED.category_id
+			products.price IS DISTINCT FROM EXCLUDED.price OR
+			products.category_id IS DISTINCT FROM EXCLUDED.category_id
 		RETURNING
 			id, name, price, category_id, created_at, updated_at, is_archived
 		)
@@ -61,12 +61,12 @@ func (p *ProductTypeRepo) Upsert(ctx context.Context, product *domain.ProductTyp
 		SELECT
 			id, name, price, category_id, created_at, updated_at, is_archived,
 			true AS no_changes
-		FROM product_types
+		FROM products
 		WHERE name = $1
 		  AND NOT EXISTS (SELECT 1 FROM upsert);
 	`
 
-	var model converter.ProductTypeModel
+	var model converter.ProductModel
 	if err := tx.QueryRow(ctx, query, product.Name, product.Price, product.CategoryID).
 		Scan(
 			&model.ID, &model.Name, &model.Price, &model.CategoryID,
@@ -82,10 +82,10 @@ func (p *ProductTypeRepo) Upsert(ctx context.Context, product *domain.ProductTyp
 }
 
 // GetProductsInfo возвращает информацию о продуктах по их идентификаторам, включая название категории.
-func (p *ProductTypeRepo) GetProductsInfo(ctx context.Context, ids []int64) ([]usecase.ProductInfo, error) {
+func (p *ProductRepo) GetProductsInfo(ctx context.Context, ids []int64) ([]usecase.ProductInfo, error) {
 	query := `
 		SELECT pr.id, pr.name, pr.price, cat.name
-		FROM product_types pr
+		FROM products pr
 		JOIN categories cat ON pr.category_id = cat.id
 		WHERE pr.id = ANY($1)
 	`

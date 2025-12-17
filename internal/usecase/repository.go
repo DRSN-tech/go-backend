@@ -6,8 +6,8 @@ import (
 	"github.com/DRSN-tech/go-backend/internal/domain"
 )
 
-type ProductTypeRepository interface {
-	Upsert(ctx context.Context, product *domain.ProductType) (*domain.ProductType, error)
+type ProductRepository interface {
+	Upsert(ctx context.Context, product *domain.Product) (*domain.Product, error)
 	GetProductsInfo(ctx context.Context, ids []int64) ([]ProductInfo, error)
 }
 

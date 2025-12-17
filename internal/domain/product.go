@@ -2,8 +2,8 @@ package domain
 
 import "time"
 
-// ProductType описывает тип продукта
-type ProductType struct {
+// Product описывает продукт
+type Product struct {
 	ID         int64
 	Name       string
 	Price      int64 // Цена хранится в копейках
@@ -13,8 +13,8 @@ type ProductType struct {
 	IsArchived bool
 }
 
-func NewProductType(name string, price int64, categoryID int64) *ProductType {
-	return &ProductType{
+func NewProduct(name string, price int64, categoryID int64) *Product {
+	return &Product{
 		Name:       name,
 		Price:      price,
 		CategoryID: categoryID,
