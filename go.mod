@@ -10,6 +10,7 @@ require (
 	github.com/jimlawless/whereami v0.0.0-20230806140227-e3eb03695f09
 	github.com/minio/minio-go/v7 v7.0.97
 	github.com/qdrant/go-client v1.16.2
+	github.com/redis/go-redis/v9 v9.17.2
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.10
 )
@@ -30,7 +31,6 @@ require (
 	github.com/minio/crc64nvme v1.1.0 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
-	github.com/redis/go-redis/v9 v9.17.2 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/tinylib/msgp v1.3.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
