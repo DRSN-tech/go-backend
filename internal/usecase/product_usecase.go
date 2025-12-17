@@ -12,27 +12,30 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// ProductTypeUseCase реализует бизнес-логику управления типами продуктов.
-type ProductTypeUseCase struct {
-	productRepo   ProductTypeRepository
+// TODO: добавить кафку и версию продукта
+// ProductUseCase реализует бизнес-логику управления типами продуктов.
+type ProductUseCase struct {
+	productRepo   ProductRepository
 	categoryRepo  CategoryRepository
 	dbPool        transaction.Transactional
 	mlService     MlServiceInfra
 	imagesInfra   ImagesInfra
 	embeddingRepo EmbeddingRepository
 	logger        logger.Logger
+	cacheRepo     CacheRepository
 }
 
 func NewProductUC(
-	productRepo ProductTypeRepository,
+	productRepo ProductRepository,
 	categoryRepo CategoryRepository,
 	dbPool transaction.Transactional,
 	mlService MlServiceInfra,
 	imagesInfra ImagesInfra,
 	embeddingRepo EmbeddingRepository,
 	logger logger.Logger,
-) *ProductTypeUseCase {
-	return &ProductTypeUseCase{
+	cacheRepo CacheRepository,
+) *ProductUseCase {
+	return &ProductUseCase{
 		productRepo:   productRepo,
 		categoryRepo:  categoryRepo,
 		dbPool:        dbPool,
@@ -40,12 +43,13 @@ func NewProductUC(
 		imagesInfra:   imagesInfra,
 		embeddingRepo: embeddingRepo,
 		logger:        logger,
+		cacheRepo:     cacheRepo,
 	}
 }
 
 // AddNewProduct обрабатывает добавление нового продукта с изображениями, категорией, векторами и сохранением в хранилища.
-func (p *ProductTypeUseCase) AddNewProduct(ctx context.Context, req *AddNewProductReq) error {
-	const op = "ProductTypeUseCase.AddNewProduct"
+func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProductReq) error {
+	const op = "ProductUseCase.RegisterNewProduct"
 
 	// Валидация данных
 	var err error
@@ -90,7 +94,7 @@ func (p *ProductTypeUseCase) AddNewProduct(ctx context.Context, req *AddNewProdu
 	}
 
 	// идемпотентное создание продукта
-	product, err := p.upsertProductType(ctx, req.Name, req.Price, category.ID)
+	product, err := p.upsertProduct(ctx, req.Name, req.Price, category.ID)
 	if err != nil {
 		return err
 	}
@@ -118,6 +122,11 @@ func (p *ProductTypeUseCase) AddNewProduct(ctx context.Context, req *AddNewProdu
 	err = tx.Commit(ctx)
 	if err != nil {
 		return e.Wrap(op, err)
+	}
+
+	// Удаление из кэша старых данных товара
+	if err := p.cacheRepo.DeleteProducts(ctx, []int64{product.ID}); err != nil {
+		p.logger.Warnf("Failed to delete products: %v", e.Wrap(op, err))
 	}
 
 	return nil
