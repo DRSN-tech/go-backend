@@ -16,6 +16,7 @@ var (
 	ErrPriceMustBePositive  = fmt.Errorf("price must be positive")
 	ErrNoImages             = fmt.Errorf("no images provided")
 	ErrUnsupportedMediaType = fmt.Errorf("unsupported media type")
+	ErrNoProducts           = fmt.Errorf("no products provided")
 )
 
 // Wrap оборачивает ошибку

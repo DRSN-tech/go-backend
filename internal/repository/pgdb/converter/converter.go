@@ -5,10 +5,10 @@ import (
 	"github.com/DRSN-tech/go-backend/internal/domain"
 )
 
-// ProductTypeConverter преобразует сущности ProductType между domain и моделью PostgreSQL.
-type ProductTypeConverter interface {
-	ToModel(entity *domain.ProductType) *ProductTypeModel
-	ToEntity(model *ProductTypeModel) *domain.ProductType
+// ProductConverter преобразует сущности Product между domain и моделью PostgreSQL.
+type ProductConverter interface {
+	ToModel(entity *domain.Product) *ProductModel
+	ToEntity(model *ProductModel) *domain.Product
 }
 
 // CategoryConverter преобразует сущности Category между domain и моделью PostgreSQL.

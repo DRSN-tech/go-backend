@@ -2,8 +2,8 @@ package converter
 
 import "time"
 
-// ProductTypeModel представляет запись таблицы product_types в PostgreSQL.
-type ProductTypeModel struct {
+// ProductModel представляет запись таблицы product_types в PostgreSQL.
+type ProductModel struct {
 	ID         int64      `db:"id"`
 	Name       string     `db:"name"`
 	Price      int64      `db:"price"`
