@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS categories(
     is_archived BOOLEAN DEFAULT false
 );
 
-CREATE TABLE IF NOT EXISTS types_products(
+CREATE TABLE IF NOT EXISTS product_types(
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(128) UNIQUE NOT NULL,
     price BIGINT NOT NULL,
