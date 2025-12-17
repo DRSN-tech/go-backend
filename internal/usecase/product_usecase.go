@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/DRSN-tech/go-backend/internal/domain"
 	"github.com/DRSN-tech/go-backend/pkg/e"
@@ -133,29 +134,81 @@ func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProd
 }
 
 // GetProductsInfo возвращает информацию о продуктах по их идентификаторам.
-func (p *ProductTypeUseCase) GetProductsInfo(ctx context.Context, req *GetProductsReq) (*GetProductsRes, error) {
-	const op = "ProductTypeUseCase.GetProductsInfo"
+func (p *ProductUseCase) GetProductsInfo(ctx context.Context, req *GetProductsReq) (*GetProductsRes, error) {
+	const op = "ProductUseCase.GetProductsInfo"
 
-	productsInfo, err := p.getProductsInfo(ctx, req.IDs)
+	// Валидация
+	if len(req.IDs) == 0 {
+		return nil, e.Wrap(op, e.ErrNoProducts)
+	}
+
+	// Поиск продуктов в хэше
+	cacheProductsMap, err := p.cacheRepo.GetProducts(ctx, req.IDs)
+	var (
+		nonCacheable []int64
+		cacheable    []ProductInfo
+	)
 	if err != nil {
-		return nil, e.Wrap(op, err)
+		for _, productId := range req.IDs {
+			nonCacheable = append(nonCacheable, productId)
+		}
+	} else {
+		for _, productId := range req.IDs {
+			if product, ok := cacheProductsMap[productId]; ok {
+				cacheable = append(cacheable, product)
+			} else {
+				nonCacheable = append(nonCacheable, productId)
+			}
+		}
 	}
 
-	result := make([]ProductInfo, 0, len(productsInfo))
-	for _, pr := range productsInfo {
-		result = append(result, NewProductInfo(pr.ID, pr.Name, pr.CategoryName, pr.Price))
+	// Получение продуктов из БД
+	var productsInfoFromDB []ProductInfo
+	if len(nonCacheable) > 0 {
+		productsInfoFromDB, err = p.getProductsInfo(ctx, nonCacheable)
+		if err != nil {
+			return nil, e.Wrap(op, err)
+		}
+
+		// Фоновое добавление продуктов в хэш
+		go func() {
+			bgCtx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			defer cancel()
+
+			if err := p.cacheRepo.SetProducts(bgCtx, productsInfoFromDB); err != nil {
+				p.logger.Warnf("Failed to cache products in background: %v", e.Wrap(op, err))
+			}
+		}()
 	}
 
-	return &GetProductsRes{Products: result}, nil
+	dbProductsMap := make(map[int64]ProductInfo, len(productsInfoFromDB))
+	for _, productInfo := range productsInfoFromDB {
+		dbProductsMap[productInfo.ID] = productInfo
+	}
+
+	// Формирование результата
+	result := make([]ProductInfo, 0, len(req.IDs))
+	notFoundProducts := make([]int64, 0)
+	for _, id := range req.IDs {
+		if pr, ok := cacheProductsMap[id]; ok {
+			result = append(result, pr)
+		} else if pr, ok := dbProductsMap[id]; ok {
+			result = append(result, pr)
+		} else {
+			notFoundProducts = append(notFoundProducts, id)
+		}
+	}
+
+	return NewGetProductsRes(result, notFoundProducts), nil
 }
 
 // getProductsInfo делегирует запрос репозиторию продуктов.
-func (p *ProductTypeUseCase) getProductsInfo(ctx context.Context, ids []int64) ([]ProductInfo, error) {
+func (p *ProductUseCase) getProductsInfo(ctx context.Context, ids []int64) ([]ProductInfo, error) {
 	return p.productRepo.GetProductsInfo(ctx, ids)
 }
 
 // getVectors запрашивает векторные представления изображений у ML-сервиса.
-func (p *ProductTypeUseCase) getVectors(ctx context.Context, images []ProductImage) ([]VectorizeRes, error) {
+func (p *ProductUseCase) getVectors(ctx context.Context, images []ProductImage) ([]VectorizeRes, error) {
 	const mockImageType = 1 // TODO: убрать заглушку на реальную переменную, PROTO-46
 
 	vectors, err := p.mlService.VectorizeRequest(ctx, NewVectorizeReq(images, mockImageType))
@@ -170,23 +223,23 @@ func (p *ProductTypeUseCase) getVectors(ctx context.Context, images []ProductIma
 	return vectors, nil
 }
 
-// upsertProductType идемпотентно создаёт или обновляет тип продукта.
-func (p *ProductTypeUseCase) upsertProductType(ctx context.Context, name string, price int64, categoryID int64) (*domain.ProductType, error) {
-	return p.productRepo.Upsert(ctx, domain.NewProductType(name, price, categoryID))
+// upsertProduct идемпотентно создаёт или обновляет продукт.
+func (p *ProductUseCase) upsertProduct(ctx context.Context, name string, price int64, categoryID int64) (*domain.Product, error) {
+	return p.productRepo.Upsert(ctx, domain.NewProduct(name, price, categoryID))
 }
 
 // createCategory идемпотентно создаёт категорию по имени продукта.
-func (p *ProductTypeUseCase) createCategory(ctx context.Context, categoryName string) (*domain.Category, error) {
+func (p *ProductUseCase) createCategory(ctx context.Context, categoryName string) (*domain.Category, error) {
 	return p.categoryRepo.Create(ctx, domain.NewCategory(categoryName))
 }
 
 // uploadImages сохраняет изображения продукта в MinIO.
-func (p *ProductTypeUseCase) uploadImages(ctx context.Context, name string, images []ProductImage) (*UploadImagesRes, error) {
+func (p *ProductUseCase) uploadImages(ctx context.Context, name string, images []ProductImage) (*UploadImagesRes, error) {
 	return p.imagesInfra.UploadImages(ctx, NewUploadImagesReq(name, images))
 }
 
 // upsertEmbeddings сохраняет векторы изображений в Qdrant с привязкой к продукту и объектам MinIO.
-func (p *ProductTypeUseCase) upsertEmbeddings(ctx context.Context, productID int64, imageKeys []string, vectors []VectorizeRes) error {
+func (p *ProductUseCase) upsertEmbeddings(ctx context.Context, productID int64, imageKeys []string, vectors []VectorizeRes) error {
 	if len(imageKeys) != len(vectors) {
 		return e.ErrImageVectorMismatch
 	}
@@ -204,7 +257,7 @@ func (p *ProductTypeUseCase) upsertEmbeddings(ctx context.Context, productID int
 }
 
 // validateProduct проверяет корректность входных данных запроса на добавление продукта.
-func (p *ProductTypeUseCase) validateProduct(req *AddNewProductReq) error {
+func (p *ProductUseCase) validateProduct(req *AddNewProductReq) error {
 	if strings.TrimSpace(req.Name) == "" {
 		return e.ErrProductNameRequired
 	}
