@@ -26,7 +26,15 @@ type GetProductsReq struct {
 
 // GetProductsRes — ответ с данными запрошенных продуктов.
 type GetProductsRes struct {
-	Products []ProductInfo
+	Products         []ProductInfo
+	NotFoundProducts []int64
+}
+
+func NewGetProductsRes(pr []ProductInfo, notFoundProducts []int64) *GetProductsRes {
+	return &GetProductsRes{
+		Products:         pr,
+		NotFoundProducts: notFoundProducts,
+	}
 }
 
 // ProductInfo — DTO с информацией о продукте для внешнего использования.
