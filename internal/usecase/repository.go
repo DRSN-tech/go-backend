@@ -23,3 +23,9 @@ type ImageRepository interface {
 type EmbeddingRepository interface {
 	Upsert(ctx context.Context, vectors []domain.Embedding) error
 }
+
+type CacheRepository interface {
+	GetProducts(ctx context.Context, ids []int64) (map[int64]ProductInfo, error)
+	SetProducts(ctx context.Context, products []ProductInfo) error
+	DeleteProducts(ctx context.Context, ids []int64) error
+}
