@@ -29,9 +29,19 @@ func (c *CategoryRepo) Create(ctx context.Context, category *domain.Category) (*
 	}
 
 	query := `
-		INSERT INTO categories(name) VALUES ($1)
-		ON CONFLICT (name) DO NOTHING
-		RETURNING id, name, created_at, updated_at, is_archived;
+		WITH ins AS (
+			INSERT INTO categories (name)
+			VALUES ($1)
+			ON CONFLICT (name) DO NOTHING
+			RETURNING id, name, created_at, updated_at, is_archived
+		)
+		SELECT id, name, created_at, updated_at, is_archived
+		FROM ins
+		UNION ALL
+		SELECT id, name, created_at, updated_at, is_archived
+		FROM categories
+		WHERE name = $1
+		  AND NOT EXISTS (SELECT 1 FROM ins);
 	`
 
 	var model converter.CategoryModel
