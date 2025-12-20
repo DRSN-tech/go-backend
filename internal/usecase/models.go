@@ -1,5 +1,7 @@
 package usecase
 
+import "github.com/DRSN-tech/go-backend/internal/domain"
+
 // TODO: Task REFACTORING-49
 // PRODUCT USECASE
 
@@ -61,6 +63,21 @@ type UploadImagesRes struct {
 type UploadImagesReq struct {
 	Name   string
 	Images []ProductImage
+}
+
+// REPOSITORIES
+
+type UpsertProductRes struct {
+	Product   *domain.Product
+	NoChanges bool
+}
+
+// MAPPERS
+func NewUpsertProductRes(product *domain.Product, noChanges bool) *UpsertProductRes {
+	return &UpsertProductRes{
+		Product:   product,
+		NoChanges: noChanges,
+	}
 }
 
 func NewProductInfo(id int64, name string, category string, price int64) ProductInfo {
