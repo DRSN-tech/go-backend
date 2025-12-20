@@ -120,11 +120,11 @@ func ensureMultipartForm(r *http.Request, maxMemory int64) error {
 
 func parseProductForm(r *http.Request) (*ProductMetadata, error) {
 	name := r.FormValue("name")
-	category := r.FormValue("category")
+	category_name := r.FormValue("category_name")
 	priceStr := r.FormValue("price")
 
-	if name == "" || category == "" || priceStr == "" {
-		return nil, e.Wrap(fmt.Sprintf("name: %s, category: %s, price: %s\n", name, category, priceStr), e.ErrMissingFields)
+	if name == "" || category_name == "" || priceStr == "" {
+		return nil, e.Wrap(fmt.Sprintf("name: %s, category_name: %s, price: %s\n", name, category_name, priceStr), e.ErrMissingFields)
 	}
 
 	priceCents, err := parsePriceToCents(priceStr)
@@ -134,7 +134,7 @@ func parseProductForm(r *http.Request) (*ProductMetadata, error) {
 
 	return &ProductMetadata{
 		Name:         name,
-		CategoryName: category,
+		CategoryName: category_name,
 		Price:        priceCents,
 	}, nil
 }

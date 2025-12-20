@@ -5,10 +5,10 @@ package usecase
 
 // AddNewProductReq — запрос на добавление нового продукта.
 type AddNewProductReq struct {
-	Name     string
-	Category string
-	Price    int64
-	Images   []ProductImage
+	Name         string
+	CategoryName string
+	Price        int64
+	Images       []ProductImage
 }
 
 // ProductImage представляет изображение, загруженное через multipart/form-data.
@@ -100,10 +100,10 @@ func NewVectorizeReq(images []ProductImage) *VectorizeReq {
 
 func NewAddNewProductReq(name string, category string, price int64, images []ProductImage) *AddNewProductReq {
 	return &AddNewProductReq{
-		Name:     name,
-		Category: category,
-		Price:    price,
-		Images:   images,
+		Name:         name,
+		CategoryName: category,
+		Price:        price,
+		Images:       images,
 	}
 }
 
