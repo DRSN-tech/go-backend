@@ -79,7 +79,7 @@ func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProd
 				p.logger.Warnf(
 					"Cleaning up orphaned images after transaction failure. product_name: %s, error: %v",
 					req.Name,
-					err,
+					e.Wrap(op, err),
 				)
 
 				p.imagesInfra.CleanupImages(imagesRes.ImagesKeys)
@@ -91,32 +91,32 @@ func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProd
 	// идемпотентное создание категории
 	category, err := p.createCategory(ctx, req.Name)
 	if err != nil {
-		return err
+		return e.Wrap(op, err)
 	}
 
 	// идемпотентное создание продукта
 	product, err := p.upsertProduct(ctx, req.Name, req.Price, category.ID)
 	if err != nil {
-		return err
+		return e.Wrap(op, err)
 	}
 
 	// Отправка изображение на ML Service для получения векторов
 	vectors, err := p.getVectors(ctx, req.Images)
 	if err != nil {
-		return err
+		return e.Wrap(op, err)
 	}
 
 	// Сохранение изображений в MinIO
 	imagesRes, err = p.uploadImages(ctx, req.Name, req.Images)
 	if err != nil {
-		return err
+		return e.Wrap(op, err)
 	}
 	uploaded = true
 
 	// Сохранение векторов с дополнительной информацией (S3 key, Product ID, Created At, Model Version)
 	err = p.upsertEmbeddings(ctx, product.ID, imagesRes.ImagesKeys, vectors)
 	if err != nil {
-		return err
+		return e.Wrap(op, err)
 	}
 
 	// Коммит изменений в бд
