@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/DRSN-tech/go-backend/internal/usecase"
@@ -41,9 +42,11 @@ func (p *ProductHandler) registerNewProduct(w http.ResponseWriter, r *http.Reque
 
 	images, err := parseImages(r.MultipartForm.File["images"])
 	if err != nil {
-		p.logger.Warnf("%d %s: %s", http.StatusBadRequest, e.ErrStatusBadRequest.Error(), err.Error())
-		WriteError(w, err)
-		return
+		if !errors.Is(err, e.ErrNoImages) {
+			p.logger.Warnf("%d %s: %s", http.StatusBadRequest, e.ErrStatusBadRequest.Error(), err.Error())
+			WriteError(w, err)
+			return
+		}
 	}
 
 	if err := p.productUsecase.RegisterNewProduct(r.Context(), usecase.NewAddNewProductReq(prMeta.Name, prMeta.CategoryName, prMeta.Price, images)); err != nil {
