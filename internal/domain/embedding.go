@@ -20,11 +20,12 @@ func NewEmbedding(id string, vector []float32, payload Payload) *Embedding {
 	}
 }
 
-func NewPayload(productID int64, imagePath string, modelVersion string) Payload {
+func NewPayload(productID int64, embedding_version int32, imagePath string, modelVersion string) Payload {
 	return Payload{
-		"product_id":    productID,
-		"image_path":    imagePath,
-		"created_at":    time.Now().UTC().UnixNano(),
-		"model_version": modelVersion,
+		"product_id":        productID,
+		"embedding_version": embedding_version,
+		"image_path":        imagePath,
+		"created_at":        time.Now().UTC().UnixNano(),
+		"model_version":     modelVersion,
 	}
 }

@@ -29,6 +29,7 @@ var (
 	ErrPricePrecision       = fmt.Errorf("price must have at most 2 decimal places")
 	ErrTooManyImages        = fmt.Errorf("too many images (max 10)")
 	ErrFileTooLarge         = fmt.Errorf("file too large")
+	ErrNoChanges            = fmt.Errorf("no changes")
 )
 
 // Wrap оборачивает ошибку

@@ -2,14 +2,12 @@ package pgdb
 
 import (
 	"context"
-	"errors"
 
 	"github.com/DRSN-tech/go-backend/internal/domain"
 	"github.com/DRSN-tech/go-backend/internal/repository/pgdb/converter"
 	"github.com/DRSN-tech/go-backend/internal/usecase"
 	"github.com/DRSN-tech/go-backend/pkg/e"
 	"github.com/DRSN-tech/go-backend/pkg/tr"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jimlawless/whereami"
 )
@@ -29,7 +27,7 @@ func NewProductRepo(pool *pgxpool.Pool, conv converter.ProductConverter) *Produc
 
 // Upsert идемпотентно создаёт или обновляет продукт по уникальному имени,
 // Запись обновляется только при изменении цены или категории.
-func (p *ProductRepo) Upsert(ctx context.Context, product *domain.Product) (*domain.Product, error) {
+func (p *ProductRepo) Upsert(ctx context.Context, product *domain.Product) (*usecase.UpsertProductRes, error) {
 	tx, err := tr.TxFromCtx(ctx)
 	if err != nil {
 		return nil, e.Wrap(whereami.WhereAmI(), err)
@@ -53,33 +51,31 @@ func (p *ProductRepo) Upsert(ctx context.Context, product *domain.Product) (*dom
 		)
 		SELECT
 			id, name, price, category_id, created_at, updated_at, is_archived,
-			false::int AS no_changes
+			false AS no_changes
 		FROM upsert
 		
 		UNION ALL
 		
 		SELECT
 			id, name, price, category_id, created_at, updated_at, is_archived,
-			true::int AS no_changes
+			true AS no_changes
 		FROM products
 		WHERE name = $1
 		  AND NOT EXISTS (SELECT 1 FROM upsert);
 	`
 
 	var model converter.ProductModel
-	var noChanges int
-	if err := tx.QueryRow(ctx, query, product.Name, product.Price, product.CategoryID).
+	var noChanges bool
+	err = tx.QueryRow(ctx, query, product.Name, product.Price, product.CategoryID).
 		Scan(
 			&model.ID, &model.Name, &model.Price, &model.CategoryID,
 			&model.CreatedAt, &model.UpdatedAt, &model.IsArchived, &noChanges,
-		); err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return product, nil
-		}
+		)
+	if err != nil {
 		return nil, e.Wrap(whereami.WhereAmI(), err)
 	}
 
-	return p.conv.ToEntity(&model), nil
+	return usecase.NewUpsertProductRes(p.conv.ToEntity(&model), noChanges), nil
 }
 
 // GetProductsInfo возвращает информацию о продуктах по их идентификаторам, включая название категории.

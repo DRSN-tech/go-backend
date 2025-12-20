@@ -49,6 +49,8 @@ func ToHTTPResponse(err error) (int, string) {
 		return http.StatusBadRequest, e.ErrTooManyImages.Error()
 	case errors.Is(err, e.ErrNoImages):
 		return http.StatusBadRequest, e.ErrNoImages.Error()
+	case errors.Is(err, e.ErrNoChanges):
+		return http.StatusBadRequest, e.ErrNoChanges.Error()
 	default:
 		return http.StatusInternalServerError, e.ErrInternalServerError.Error()
 	}

@@ -53,9 +53,11 @@ func Run() {
 	catConv := pgdbConv.NewCategoryConverterImpl()
 	prConv := pgdbConv.NewProductConverterImpl()
 	infoConv := redisConv.NewProductInfoConverterImpl()
+	embConv := pgdbConv.NewProductEmbeddingVersionConverterImpl()
 
 	productRepo := pgdb.NewProductRepo(db.Pool, prConv)
 	categoryRepo := pgdb.NewCategoryRepo(db.Pool, catConv)
+	prEmbeddingVersionRepo := pgdb.NewProductEmbeddingVersionRepo(db.Pool, embConv)
 
 	minioClient, err := clients.NewMinIOClient(cfg)
 	if err != nil {
@@ -120,6 +122,7 @@ func Run() {
 		embRepo,
 		logger,
 		cacheRepo,
+		prEmbeddingVersionRepo,
 	)
 
 	grpcSrv := v1Grpc.NewGRPCServer(cfg.Grpc)

@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ type ProductUseCase struct {
 	embeddingRepo EmbeddingRepository
 	logger        logger.Logger
 	cacheRepo     CacheRepository
+	prEmbVersRepo ProductEmbeddingVersionRepository
 }
 
 func NewProductUC(
@@ -35,6 +37,7 @@ func NewProductUC(
 	embeddingRepo EmbeddingRepository,
 	logger logger.Logger,
 	cacheRepo CacheRepository,
+	prEmbVersRepo ProductEmbeddingVersionRepository,
 ) *ProductUseCase {
 	return &ProductUseCase{
 		productRepo:   productRepo,
@@ -45,6 +48,7 @@ func NewProductUC(
 		embeddingRepo: embeddingRepo,
 		logger:        logger,
 		cacheRepo:     cacheRepo,
+		prEmbVersRepo: prEmbVersRepo,
 	}
 }
 
@@ -55,7 +59,7 @@ func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProd
 	// Валидация данных
 	var err error
 	err = p.validateProduct(req)
-	if err != nil {
+	if err != nil && !errors.Is(err, e.ErrNoImages) {
 		return e.Wrap(op, err)
 	}
 
@@ -95,9 +99,22 @@ func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProd
 	}
 
 	// идемпотентное создание продукта
-	product, err := p.upsertProduct(ctx, req.Name, req.Price, category.ID)
+	upsertRes, err := p.upsertProduct(ctx, req.Name, req.Price, category.ID)
 	if err != nil {
 		return e.Wrap(op, err)
+	}
+
+	if req.Images == nil {
+		if upsertRes.NoChanges == true {
+			return e.Wrap(op, e.ErrNoChanges)
+		}
+
+		err = tx.Commit(ctx)
+		if err != nil {
+			return e.Wrap(op, err)
+		}
+
+		return nil
 	}
 
 	// Отправка изображение на ML Service для получения векторов
@@ -113,11 +130,18 @@ func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProd
 	}
 	uploaded = true
 
-	// Сохранение векторов с дополнительной информацией (S3 key, Product ID, Created At, Model Version)
-	err = p.upsertEmbeddings(ctx, product.ID, imagesRes.ImagesKeys, vectors)
+	prEmbeddingVersion, err := p.prEmbVersRepo.Upsert(ctx, upsertRes.Product.ID)
 	if err != nil {
 		return e.Wrap(op, err)
 	}
+
+	// Сохранение векторов с дополнительной информацией (S3 key, Product ID, Created At, Model Version)
+	err = p.upsertEmbeddings(ctx, upsertRes.Product.ID, prEmbeddingVersion.EmbeddingVersion, imagesRes.ImagesKeys, vectors)
+	if err != nil {
+		return e.Wrap(op, err)
+	}
+
+	// TODO: Task KAFKA-64
 
 	// Коммит изменений в бд
 	err = tx.Commit(ctx)
@@ -126,7 +150,7 @@ func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProd
 	}
 
 	// Удаление из кэша старых данных товара
-	if err := p.cacheRepo.DeleteProducts(ctx, []int64{product.ID}); err != nil {
+	if err := p.cacheRepo.DeleteProducts(ctx, []int64{upsertRes.Product.ID}); err != nil {
 		p.logger.Warnf("Failed to delete products: %v", e.Wrap(op, err))
 	}
 
@@ -222,7 +246,7 @@ func (p *ProductUseCase) getVectors(ctx context.Context, images []ProductImage) 
 }
 
 // upsertProduct идемпотентно создаёт или обновляет продукт.
-func (p *ProductUseCase) upsertProduct(ctx context.Context, name string, price int64, categoryID int64) (*domain.Product, error) {
+func (p *ProductUseCase) upsertProduct(ctx context.Context, name string, price int64, categoryID int64) (*UpsertProductRes, error) {
 	return p.productRepo.Upsert(ctx, domain.NewProduct(name, price, categoryID))
 }
 
@@ -237,7 +261,7 @@ func (p *ProductUseCase) uploadImages(ctx context.Context, name string, images [
 }
 
 // upsertEmbeddings сохраняет векторы изображений в Qdrant с привязкой к продукту и объектам MinIO.
-func (p *ProductUseCase) upsertEmbeddings(ctx context.Context, productID int64, imageKeys []string, vectors []VectorizeRes) error {
+func (p *ProductUseCase) upsertEmbeddings(ctx context.Context, productID int64, embeddingVersion int32, imageKeys []string, vectors []VectorizeRes) error {
 	if len(imageKeys) != len(vectors) {
 		return e.ErrImageVectorMismatch
 	}
@@ -247,7 +271,7 @@ func (p *ProductUseCase) upsertEmbeddings(ctx context.Context, productID int64, 
 		if len(vectors[i].Vector) == 0 {
 			return e.ErrVectorEmbeddingEmpty
 		}
-		payload := domain.NewPayload(productID, key, vectors[i].ModelVersion)
+		payload := domain.NewPayload(productID, embeddingVersion, key, vectors[i].ModelVersion)
 		embeddings = append(embeddings, *domain.NewEmbedding(uuid.NewString(), vectors[i].Vector, payload))
 	}
 
