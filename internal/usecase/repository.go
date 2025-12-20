@@ -15,6 +15,10 @@ type CategoryRepository interface {
 	Create(ctx context.Context, category *domain.Category) (*domain.Category, error)
 }
 
+type ProductEmbeddingVersionRepository interface {
+	Upsert(ctx context.Context, productID int64) (*domain.ProductEmbeddingVersion, error)
+}
+
 type ImageRepository interface {
 	Upload(ctx context.Context, image *domain.Image) (string, error)
 	Delete(ctx context.Context, key string) error
