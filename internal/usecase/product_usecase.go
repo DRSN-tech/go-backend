@@ -209,9 +209,7 @@ func (p *ProductUseCase) getProductsInfo(ctx context.Context, ids []int64) ([]Pr
 
 // getVectors запрашивает векторные представления изображений у ML-сервиса.
 func (p *ProductUseCase) getVectors(ctx context.Context, images []ProductImage) ([]VectorizeRes, error) {
-	const mockImageType = 1 // TODO: убрать заглушку на реальную переменную, PROTO-46
-
-	vectors, err := p.mlService.VectorizeRequest(ctx, NewVectorizeReq(images, mockImageType))
+	vectors, err := p.mlService.VectorizeRequest(ctx, NewVectorizeReq(images))
 	if err != nil {
 		return nil, err
 	}

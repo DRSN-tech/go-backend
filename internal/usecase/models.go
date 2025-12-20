@@ -42,8 +42,7 @@ type ProductInfo struct {
 
 // VectorizeReq — запрос на векторизацию изображений.
 type VectorizeReq struct {
-	Images    []ProductImage
-	ImageType int32 // TODO: Пока заглушка для будущих изменений
+	Images []ProductImage
 }
 
 // VectorizeRes — результат векторизации одного изображения.
@@ -93,10 +92,9 @@ func NewUploadImagesRes(imagesKeys []string) *UploadImagesRes {
 	}
 }
 
-func NewVectorizeReq(images []ProductImage, imageType int32) *VectorizeReq {
+func NewVectorizeReq(images []ProductImage) *VectorizeReq {
 	return &VectorizeReq{
-		Images:    images,
-		ImageType: imageType,
+		Images: images,
 	}
 }
 
