@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/DRSN-tech/go-backend/internal/cfg"
+	infra "github.com/DRSN-tech/go-backend/internal/infrastructure"
 	"github.com/DRSN-tech/go-backend/internal/proto"
 	"github.com/DRSN-tech/go-backend/internal/usecase"
 	"github.com/DRSN-tech/go-backend/pkg/e"
@@ -81,9 +82,16 @@ func (m *MLService) vectorizeBatch(ctx context.Context, req *usecase.VectorizeRe
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
+			ext, err := infra.GetExtensionFromMIME(image.MimeType)
+			if err != nil {
+				m.logger.Warnf("%s: image: %s, error: %s", whereami.WhereAmI(), image.Name, err.Error())
+				errCh <- err
+				return
+			}
+
 			protoReq := proto.VectorizeRequest{
 				ImageData: image.Data,
-				ImageType: req.ImageType,
+				ImageType: infra.ConvertExtensionToProtoEnum(ext),
 			}
 
 			res, err := m.client.VectorizeImage(ctx, &protoReq)
