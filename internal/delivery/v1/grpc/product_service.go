@@ -22,7 +22,17 @@ func NewProductService(prUC usecase.ProductUC, logger logger.Logger) *ProductSer
 func (g *ProductService) GetProductsInfo(ctx context.Context, req *proto.ProductsInfoRequest) (*proto.ProductsInfoResponse, error) {
 	const op = "grpc.GetProductsInfo"
 
-	res, err := g.prUC.GetProductsInfo(ctx, usecase.NewGetProductsReq(req.Ids))
+	set := make(map[int64]struct{})
+	for _, id := range req.Ids {
+		set[id] = struct{}{}
+	}
+
+	uniqueProducts := make([]int64, 0, len(set))
+	for id := range set {
+		uniqueProducts = append(uniqueProducts, id)
+	}
+
+	res, err := g.prUC.GetProductsInfo(ctx, usecase.NewGetProductsReq(uniqueProducts))
 	if err != nil {
 		g.logger.Errorf(e.Wrap(op, err), "%s", op)
 		return nil, GRPCErrorResponse(e.Wrap(op, err))
