@@ -25,6 +25,15 @@ type CategoryConverter interface {
 	ToEntity(model *CategoryModel) *domain.Category
 }
 
+// CategoryConverter преобразует сущности ProductEmbeddingVersion между domain и моделью PostgreSQL.
+// goverter:converter
+// goverter:extend ConvertTime
+// goverter:extend ConvertPointerTime
+type ProductEmbeddingVersionConverter interface {
+	ToModel(entity *domain.ProductEmbeddingVersion) *ProductEmbeddingVersionModel
+	ToEntity(model *ProductEmbeddingVersionModel) *domain.ProductEmbeddingVersion
+}
+
 func ConvertPointerTime(t *time.Time) *time.Time {
 	return t
 }
