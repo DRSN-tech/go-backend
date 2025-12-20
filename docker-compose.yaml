@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:17
-    container_name: rcv-db
+    container_name: rvc-db
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -21,7 +21,7 @@ services:
 
   redis:
     image: redis:7
-    container_name: rcv-redis
+    container_name: rvc-redis
     ports:
       - "${REDIS_PORT}:6379"
     volumes:
@@ -40,8 +40,8 @@ services:
     container_name: qdrant
     restart: unless-stopped
     ports:
-      - "${QDRANT_GRPC_PORT:-6334}:6334"
-      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334" # gRPC порт (внутренний:6334)
+      - "${QDRANT_PORT:-6333}:6333" # HTTP REST порт (внутренний:6333)
     volumes:
       - qdrant_data:/qdrant/storage
     networks:
@@ -51,7 +51,7 @@ services:
     image: minio/minio:latest
     container_name: minio
     ports:
-      - "${MINIO_API_PORT}:9000"    # API порт для Go client
+      - "${MINIO_API_PORT}:9000" # API порт для Go client
       - "${MINIO_CONSOLE_PORT}:9001" # Web-консоль
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
@@ -70,11 +70,11 @@ services:
 
   ml-service:
     build:
-      context: ../ml-service
+      context: ../ml-service # Путь к директории с Dockerfile для ML сервиса (по умолчанию на уровень выше текущей директории)
     env_file:
       - .env
     environment:
-      - APP_PORT=${APP_PORT:-50051}
+      - ML_PORT=${ML_PORT:-50051}
       - DOWNLOAD_MODEL=true
       - S3_ENDPOINT=${S3_ENDPOINT}
       - S3_KEY=${S3_KEY}
@@ -84,7 +84,7 @@ services:
       - MODEL_LOCAL_PATH=/app/models/yolo11-seg.pt
       - YOLO_MODEL_PATH=/app/models/yolo11-seg.pt
     ports:
-      - "${APP_PORT:-50051}:50051"
+      - "${ML_PORT:-50051}:50051"
     networks:
       - rvc-drsn.tech
     volumes:
