@@ -4,35 +4,35 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
+	"github.com/DRSN-tech/go-backend/internal/cfg"
 	"github.com/DRSN-tech/go-backend/internal/repository/redis/converter"
 	"github.com/DRSN-tech/go-backend/internal/usecase"
+	"github.com/DRSN-tech/go-backend/pkg/clients"
 	"github.com/DRSN-tech/go-backend/pkg/e"
 	"github.com/DRSN-tech/go-backend/pkg/logger"
-	"github.com/DRSN-tech/go-backend/pkg/redis_client"
 	"github.com/jimlawless/whereami"
 )
 
-type RedisCacheRepo struct {
-	client     *redis_client.RedisClient
-	conv       converter.ProductInfoConverter
-	productTTL time.Duration
-	logger     logger.Logger
+type CacheRepo struct {
+	client *clients.RedisClient
+	conv   converter.ProductInfoConverter
+	cfg    *cfg.RedisCfg
+	logger logger.Logger
 }
 
-func NewRedisCacheRepo(client *redis_client.RedisClient, conv converter.ProductInfoConverter,
-	productTTL time.Duration, logger logger.Logger) *RedisCacheRepo {
-	return &RedisCacheRepo{
-		client:     client,
-		conv:       conv,
-		productTTL: productTTL,
-		logger:     logger,
+func NewCacheRepo(client *clients.RedisClient, conv converter.ProductInfoConverter,
+	cfg *cfg.RedisCfg, logger logger.Logger) *CacheRepo {
+	return &CacheRepo{
+		client: client,
+		conv:   conv,
+		cfg:    cfg,
+		logger: logger,
 	}
 }
 
 // GetProducts возвращает закэшированные продукты по ID, игнорируя промахи и логируя их
-func (r *RedisCacheRepo) GetProducts(ctx context.Context, ids []int64) (map[int64]usecase.ProductInfo, error) {
+func (r *CacheRepo) GetProducts(ctx context.Context, ids []int64) (map[int64]usecase.ProductInfo, error) {
 	keys := r.buildProductCacheKeys(ids)
 
 	values, err := r.client.Client.MGet(ctx, keys...).Result()
@@ -73,7 +73,7 @@ func (r *RedisCacheRepo) GetProducts(ctx context.Context, ids []int64) (map[int6
 
 // SetProducts атомарно кэширует несколько продуктов с заданным TTL.
 // Игнорирует ошибки сериализации/записи, логируя их.
-func (r *RedisCacheRepo) SetProducts(ctx context.Context, products []usecase.ProductInfo) error {
+func (r *CacheRepo) SetProducts(ctx context.Context, products []usecase.ProductInfo) error {
 	models := r.conv.ToArrRedisModel(products)
 
 	pipeline := r.client.Client.Pipeline()
@@ -85,7 +85,7 @@ func (r *RedisCacheRepo) SetProducts(ctx context.Context, products []usecase.Pro
 		}
 
 		key := r.productKey(model.ID)
-		pipeline.Set(ctx, key, data, r.productTTL)
+		pipeline.Set(ctx, key, data, r.cfg.ProductTTL)
 	}
 
 	if _, err := pipeline.Exec(ctx); err != nil {
@@ -96,7 +96,7 @@ func (r *RedisCacheRepo) SetProducts(ctx context.Context, products []usecase.Pro
 }
 
 // DeleteProducts удаляет продукты из кэша по ID
-func (r *RedisCacheRepo) DeleteProducts(ctx context.Context, ids []int64) error {
+func (r *CacheRepo) DeleteProducts(ctx context.Context, ids []int64) error {
 	keys := r.buildProductCacheKeys(ids)
 
 	if err := r.client.Client.Del(ctx, keys...).Err(); err != nil {
@@ -107,7 +107,7 @@ func (r *RedisCacheRepo) DeleteProducts(ctx context.Context, ids []int64) error 
 }
 
 // marshalProductForCache сериализует продукт в JSON для кэша
-func (r *RedisCacheRepo) marshalProductForCache(model converter.ProductInfoRedisModel) ([]byte, error) {
+func (r *CacheRepo) marshalProductForCache(model converter.ProductInfoRedisModel) ([]byte, error) {
 	data, err := json.Marshal(model)
 	if err != nil {
 		return nil, err
@@ -117,7 +117,7 @@ func (r *RedisCacheRepo) marshalProductForCache(model converter.ProductInfoRedis
 }
 
 // unmarshalProductFromCache десериализует JSON из кэша в модель продукта
-func (r *RedisCacheRepo) unmarshalProductFromCache(data []byte) (*converter.ProductInfoRedisModel, error) {
+func (r *CacheRepo) unmarshalProductFromCache(data []byte) (*converter.ProductInfoRedisModel, error) {
 	var model converter.ProductInfoRedisModel
 	if err := json.Unmarshal(data, &model); err != nil {
 		return nil, err
@@ -127,7 +127,7 @@ func (r *RedisCacheRepo) unmarshalProductFromCache(data []byte) (*converter.Prod
 }
 
 // buildProductCacheKeys формирует Redis-ключи из ID продуктов
-func (r *RedisCacheRepo) buildProductCacheKeys(ids []int64) []string {
+func (r *CacheRepo) buildProductCacheKeys(ids []int64) []string {
 	keys := make([]string, len(ids))
 	for i, id := range ids {
 		keys[i] = r.productKey(id)
@@ -137,7 +137,7 @@ func (r *RedisCacheRepo) buildProductCacheKeys(ids []int64) []string {
 }
 
 // productKey возвращает Redis-ключ для одного продукта
-func (r *RedisCacheRepo) productKey(id int64) string {
+func (r *CacheRepo) productKey(id int64) string {
 	return fmt.Sprintf("product:%d", id)
 }
 
