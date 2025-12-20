@@ -1,4 +1,4 @@
-package redis_client
+package clients
 
 import (
 	"context"
@@ -32,7 +32,6 @@ func NewRedisClient(cfg *cfg.RedisCfg) *RedisClient {
 
 func (r *RedisClient) Ping(ctx context.Context) error {
 	if err := r.Client.Ping(ctx).Err(); err != nil {
-		// TODO: перенести лог ошибки в app.go
 		// r.logger.Errorf(err, "failed to connect to redis server: %s\n", err.Error())
 		return e.Wrap(whereami.WhereAmI(), err)
 	}

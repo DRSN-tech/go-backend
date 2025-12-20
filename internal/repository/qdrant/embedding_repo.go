@@ -10,21 +10,21 @@ import (
 	"github.com/qdrant/go-client/qdrant"
 )
 
-// QdrantEmbeddingRepo репозиторий для работы с embedding-векторами в Qdrant
-type QdrantEmbeddingRepo struct {
+// EmbeddingRepo репозиторий для работы с embedding-векторами в Qdrant
+type EmbeddingRepo struct {
 	client *qdrant.Client
-	cfg    *cfg.Configuration
+	cfg    *cfg.QdrantCfg
 }
 
-func NewQdrantEmbeddingRepo(client *qdrant.Client, cfg *cfg.Configuration) *QdrantEmbeddingRepo {
-	return &QdrantEmbeddingRepo{
+func NewEmbeddingRepo(client *qdrant.Client, cfg *cfg.QdrantCfg) *EmbeddingRepo {
+	return &EmbeddingRepo{
 		client: client,
 		cfg:    cfg,
 	}
 }
 
 // Upsert сохраняет или обновляет embedding-векторы в указанной коллекции Qdrant.
-func (q *QdrantEmbeddingRepo) Upsert(ctx context.Context, vectors []domain.Embedding) error {
+func (q *EmbeddingRepo) Upsert(ctx context.Context, vectors []domain.Embedding) error {
 	reqVectors := make([]*qdrant.PointStruct, 0, len(vectors))
 	for _, vector := range vectors {
 		reqVectors = append(reqVectors, &qdrant.PointStruct{

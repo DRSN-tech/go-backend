@@ -6,46 +6,45 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DRSN-tech/go-backend/internal/cfg"
 	"github.com/DRSN-tech/go-backend/internal/proto"
 	"github.com/DRSN-tech/go-backend/internal/usecase"
 	"github.com/DRSN-tech/go-backend/pkg/e"
 	"github.com/DRSN-tech/go-backend/pkg/jitter"
 	"github.com/DRSN-tech/go-backend/pkg/logger"
+	"github.com/jimlawless/whereami"
 )
 
 // MLService клиент для взаимодействия с внешним ML-сервисом
 type MLService struct {
-	client        proto.MachineLearningServiceClient
-	maxConcurrent int // TODO: 5-10
-	maxRetries    int // TODO: 3
-	logger        logger.Logger
+	client proto.MachineLearningServiceClient
+	cfg    *cfg.MLServiceCfg
+	logger logger.Logger
 }
 
-func NewMLService(client proto.MachineLearningServiceClient, maxConcurrent int, maxRetries int, logger logger.Logger) *MLService {
+func NewMLService(client proto.MachineLearningServiceClient, cfg *cfg.MLServiceCfg, logger logger.Logger) *MLService {
 	return &MLService{
-		client:        client,
-		maxConcurrent: maxConcurrent,
-		maxRetries:    maxRetries,
-		logger:        logger,
+		client: client,
+		cfg:    cfg,
+		logger: logger,
 	}
 }
 
 // VectorizeRequest выполняет векторизацию изображений с retry-логикой и экспоненциальной задержкой
 func (m *MLService) VectorizeRequest(ctx context.Context, req *usecase.VectorizeReq) ([]usecase.VectorizeRes, error) {
 	const (
-		op         = "MLService.VectorizeRequest"
 		baseJitter = 1 * time.Second
 		maxJitter  = 30 * time.Second
 	)
 
-	for attempt := 0; attempt < m.maxRetries; attempt++ {
+	for attempt := 0; attempt < m.cfg.MaxRetries; attempt++ {
 		vectors, err := m.vectorizeBatch(ctx, req)
 		if err == nil {
 			return vectors, nil
 		}
 
-		if attempt == m.maxRetries-1 {
-			return nil, e.Wrap(op, fmt.Errorf("all %d attempts failed", m.maxRetries))
+		if attempt == m.cfg.MaxRetries-1 {
+			return nil, e.Wrap(whereami.WhereAmI(), fmt.Errorf("all %d attempts failed", m.cfg.MaxRetries))
 		}
 
 		sleepTime := jitter.ExponentialBackoff(
@@ -59,11 +58,11 @@ func (m *MLService) VectorizeRequest(ctx context.Context, req *usecase.Vectorize
 		select {
 		case <-time.After(sleepTime):
 		case <-ctx.Done():
-			return nil, e.Wrap(op, ctx.Err())
+			return nil, e.Wrap(whereami.WhereAmI(), ctx.Err())
 		}
 	}
 
-	return nil, e.Wrap(op, fmt.Errorf("unreachable"))
+	return nil, e.Wrap(whereami.WhereAmI(), fmt.Errorf("unreachable"))
 }
 
 // vectorizeBatch отправляет батч изображений на векторизацию параллельно с ограничением конкурентности
@@ -72,7 +71,7 @@ func (m *MLService) vectorizeBatch(ctx context.Context, req *usecase.VectorizeRe
 
 	vectorCh := make(chan usecase.VectorizeRes, len(req.Images))
 	errCh := make(chan error, len(req.Images))
-	sem := make(chan struct{}, m.maxConcurrent)
+	sem := make(chan struct{}, m.cfg.MaxConcurrent)
 
 	var wg sync.WaitGroup
 	for _, image := range req.Images {
@@ -89,6 +88,7 @@ func (m *MLService) vectorizeBatch(ctx context.Context, req *usecase.VectorizeRe
 
 			res, err := m.client.VectorizeImage(ctx, &protoReq)
 			if err != nil {
+				m.logger.Warnf("VectorizeImage failed: %v", err)
 				errCh <- err
 				return
 			}

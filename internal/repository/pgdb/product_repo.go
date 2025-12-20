@@ -53,24 +53,25 @@ func (p *ProductRepo) Upsert(ctx context.Context, product *domain.Product) (*dom
 		)
 		SELECT
 			id, name, price, category_id, created_at, updated_at, is_archived,
-			false AS no_changes
+			false::int AS no_changes
 		FROM upsert
 		
 		UNION ALL
 		
 		SELECT
 			id, name, price, category_id, created_at, updated_at, is_archived,
-			true AS no_changes
+			true::int AS no_changes
 		FROM products
 		WHERE name = $1
 		  AND NOT EXISTS (SELECT 1 FROM upsert);
 	`
 
 	var model converter.ProductModel
+	var noChanges int
 	if err := tx.QueryRow(ctx, query, product.Name, product.Price, product.CategoryID).
 		Scan(
 			&model.ID, &model.Name, &model.Price, &model.CategoryID,
-			&model.CreatedAt, &model.UpdatedAt, &model.IsArchived,
+			&model.CreatedAt, &model.UpdatedAt, &model.IsArchived, &noChanges,
 		); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return product, nil

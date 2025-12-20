@@ -18,22 +18,18 @@ import (
 
 // MinioInfrastructure управляет загрузкой и очисткой изображений в MinIO.
 type MinioInfrastructure struct {
-	minioRepo         usecase.ImageRepository
-	cfg               cfg.Configuration
-	logger            logger.Logger
-	shutdownCtx       context.Context
-	wg                sync.WaitGroup
-	uploadImagesLimit int
+	minioRepo usecase.ImageRepository
+	cfg       *cfg.MinIOCfg
+	logger    logger.Logger
+	wg        sync.WaitGroup
 }
 
-func NewMinioInfrastructure(minioRepo usecase.ImageRepository, cfg cfg.Configuration, logger logger.Logger, shutdownCtx context.Context) *MinioInfrastructure {
+func NewMinioInfrastructure(minioRepo usecase.ImageRepository, cfg *cfg.MinIOCfg, logger logger.Logger) *MinioInfrastructure {
 	return &MinioInfrastructure{
-		minioRepo:         minioRepo,
-		cfg:               cfg,
-		logger:            logger,
-		shutdownCtx:       shutdownCtx,
-		wg:                sync.WaitGroup{},
-		uploadImagesLimit: cfg.UploadImagesLimit,
+		minioRepo: minioRepo,
+		cfg:       cfg,
+		logger:    logger,
+		wg:        sync.WaitGroup{},
 	}
 }
 
@@ -47,7 +43,7 @@ func (m *MinioInfrastructure) UploadImages(ctx context.Context, req *usecase.Upl
 
 	keyCh := make(chan string, len(req.Images))
 	errCh := make(chan error, len(req.Images))
-	sem := make(chan struct{}, m.uploadImagesLimit)
+	sem := make(chan struct{}, m.cfg.UploadImagesLimit)
 
 	var uploadWg sync.WaitGroup
 	for _, image := range req.Images {
@@ -129,22 +125,16 @@ func (m *MinioInfrastructure) cleanupUploadedKeys(keys []string) {
 	m.logger.Infof("%s: Cleaning up uploaded keys", op)
 
 	// Создаём контекст с таймаутом на основе shutdownCtx
-	ctx, cancel := context.WithTimeout(m.shutdownCtx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	for _, key := range keys {
+		deleted := false
 		backoff := time.Second
 		for attempt := 0; attempt < 3; attempt++ {
 			if err := m.minioRepo.Delete(ctx, key); err == nil {
+				deleted = true
 				break // Успешно удалено
-			}
-
-			// Проверяем, не отменён ли контекст
-			select {
-			case <-ctx.Done():
-				m.logger.Warnf("cleanup interrupted by shutdown, key=%v", key)
-				return
-			default:
 			}
 
 			if attempt < 2 {
@@ -152,16 +142,17 @@ func (m *MinioInfrastructure) cleanupUploadedKeys(keys []string) {
 				jitter := time.Duration(time.Now().UnixNano() % int64(time.Second))
 				sleepTime := backoff + jitter
 
-				select {
-				case <-time.After(sleepTime):
-				case <-ctx.Done():
-					m.logger.Warnf("cleanup interrupted by shutdown during backoff, key=%v", key)
-					return
-				}
+				time.Sleep(sleepTime)
 				backoff *= 2
 			}
 		}
+
+		if !deleted {
+			m.logger.Warnf("%s: failed to delete key after 3 attempts: %s", op, key)
+		}
 	}
+
+	m.logger.Infof("%s: cleanup finished", op)
 }
 
 // WaitForCleanup ожидает завершения всех фоновых задач очистки с учётом таймаута завершения приложения.

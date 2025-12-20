@@ -11,21 +11,21 @@ import (
 	"github.com/minio/minio-go/v7"
 )
 
-// MinIOImageRepo реализует репозиторий изображений поверх MinIO.
-type MinIOImageRepo struct {
+// ImageRepo реализует репозиторий изображений поверх MinIO.
+type ImageRepo struct {
 	mc  *minio.Client
-	cfg *cfg.Configuration
+	cfg *cfg.MinIOCfg
 }
 
-func NewMinIOImageRepo(mc *minio.Client, cfg *cfg.Configuration) *MinIOImageRepo {
-	return &MinIOImageRepo{
+func NewImageRepo(mc *minio.Client, cfg *cfg.MinIOCfg) *ImageRepo {
+	return &ImageRepo{
 		mc:  mc,
 		cfg: cfg,
 	}
 }
 
 // Upload загружает изображение в MinIO и возвращает ключ объекта.
-func (i *MinIOImageRepo) Upload(ctx context.Context, image *domain.Image) (string, error) {
+func (i *ImageRepo) Upload(ctx context.Context, image *domain.Image) (string, error) {
 	reader := bytes.NewReader(image.Bytes)
 
 	info, err := i.mc.PutObject(ctx, i.cfg.BucketName, image.ObjectKey, reader, *image.Size, minio.PutObjectOptions{
@@ -39,7 +39,7 @@ func (i *MinIOImageRepo) Upload(ctx context.Context, image *domain.Image) (strin
 }
 
 // Delete удаляет объект из MinIO по указанному ключу.
-func (i *MinIOImageRepo) Delete(ctx context.Context, key string) error {
+func (i *ImageRepo) Delete(ctx context.Context, key string) error {
 	if err := i.mc.RemoveObject(ctx, i.cfg.BucketName, key, minio.RemoveObjectOptions{}); err != nil {
 		return e.Wrap(whereami.WhereAmI(), err)
 	}

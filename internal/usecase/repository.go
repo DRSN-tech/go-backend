@@ -29,3 +29,22 @@ type CacheRepository interface {
 	SetProducts(ctx context.Context, products []ProductInfo) error
 	DeleteProducts(ctx context.Context, ids []int64) error
 }
+
+type Repository struct {
+	ProductRepo   ProductRepository
+	CategoryRepo  CategoryRepository
+	ImageRepo     ImageRepository
+	EmbeddingRepo EmbeddingRepository
+	CacheRepo     CacheRepository
+}
+
+func NewRepository(productRepo ProductRepository, categoryRepo CategoryRepository,
+	imageRepo ImageRepository, embeddingRepo EmbeddingRepository, cacheRepo CacheRepository) *Repository {
+	return &Repository{
+		ProductRepo:   productRepo,
+		CategoryRepo:  categoryRepo,
+		ImageRepo:     imageRepo,
+		EmbeddingRepo: embeddingRepo,
+		CacheRepo:     cacheRepo,
+	}
+}

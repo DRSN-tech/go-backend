@@ -5,9 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
+	"github.com/DRSN-tech/go-backend/internal/cfg"
 	"github.com/DRSN-tech/go-backend/pkg/e"
 	"github.com/DRSN-tech/go-backend/pkg/logger"
 	"github.com/golang-migrate/migrate/v4"
@@ -19,25 +19,26 @@ import (
 
 // PgDatabase инкапсулирует подключение к PostgreSQL и управление миграциями.
 type PgDatabase struct {
-	Pool *pgxpool.Pool
-	Dsn  string
+	Pool *pgxpool.Pool // TODO: проверить надо ли делать это поле публичным
+	dsn  string
+	cfg  *cfg.PGDBCfg
 }
 
-func NewPgDatabase(pool *pgxpool.Pool, dsn string) *PgDatabase {
-	return &PgDatabase{Pool: pool, Dsn: dsn}
+func NewPgDatabase(pool *pgxpool.Pool, cfg *cfg.PGDBCfg, dsn string) *PgDatabase {
+	return &PgDatabase{Pool: pool, cfg: cfg, dsn: dsn}
 }
 
-// Connect устанавливает соединение с PostgreSQL с использованием переменных окружения.
-func Connect() (*PgDatabase, error) {
+// Connect устанавливает соединение с PostgreSQL.
+func Connect(cfg *cfg.PGDBCfg) (*PgDatabase, error) {
 	const op = "PgDatabase.Connect"
 	dsn := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
-		os.Getenv("POSTGRES_HOST"),
-		os.Getenv("POSTGRES_PORT"),
-		os.Getenv("POSTGRES_USER"),
-		os.Getenv("POSTGRES_PASSWORD"),
-		os.Getenv("POSTGRES_DB"),
-		os.Getenv("SSL_MODE"),
+		cfg.Host,
+		cfg.Port,
+		cfg.User,
+		cfg.Password,
+		cfg.DBName,
+		cfg.SSLMode,
 	)
 
 	pool, err := pgxpool.New(context.Background(), dsn)
@@ -52,7 +53,19 @@ func Connect() (*PgDatabase, error) {
 		return nil, e.Wrap(op, err)
 	}
 
-	return NewPgDatabase(pool, dsn), nil
+	return NewPgDatabase(pool, cfg, dsn), nil
+}
+
+func (db *PgDatabase) Ping() error {
+	const op = "PgDatabase.Ping"
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+
+	if err := db.Pool.Ping(ctx); err != nil {
+		return e.Wrap(op, err)
+	}
+
+	return nil
 }
 
 // Close корректно закрывает пул соединений к базе данных.
@@ -71,7 +84,7 @@ func (db *PgDatabase) RunMigrations(logger logger.Logger) error {
 		sourceURL          = "file://db/migrations"
 	)
 
-	sqlDb, err := sql.Open(driverName, db.Dsn)
+	sqlDb, err := sql.Open(driverName, db.dsn)
 	if err != nil {
 		return err
 	}

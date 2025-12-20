@@ -30,13 +30,6 @@ type GetProductsRes struct {
 	NotFoundProducts []int64
 }
 
-func NewGetProductsRes(pr []ProductInfo, notFoundProducts []int64) *GetProductsRes {
-	return &GetProductsRes{
-		Products:         pr,
-		NotFoundProducts: notFoundProducts,
-	}
-}
-
 // ProductInfo — DTO с информацией о продукте для внешнего использования.
 type ProductInfo struct {
 	ID           int64
@@ -105,4 +98,33 @@ func NewVectorizeReq(images []ProductImage, imageType int32) *VectorizeReq {
 		Images:    images,
 		ImageType: imageType,
 	}
+}
+
+func NewAddNewProductReq(name string, category string, price int64, images []ProductImage) *AddNewProductReq {
+	return &AddNewProductReq{
+		Name:     name,
+		Category: category,
+		Price:    price,
+		Images:   images,
+	}
+}
+
+func NewProductImage(data []byte, mimeType string, size int64, name string) *ProductImage {
+	return &ProductImage{
+		Data:     data,
+		MimeType: mimeType,
+		Size:     size,
+		Name:     name,
+	}
+}
+
+func NewGetProductsRes(pr []ProductInfo, notFoundProducts []int64) *GetProductsRes {
+	return &GetProductsRes{
+		Products:         pr,
+		NotFoundProducts: notFoundProducts,
+	}
+}
+
+func NewGetProductsReq(ids []int64) *GetProductsReq {
+	return &GetProductsReq{ids}
 }

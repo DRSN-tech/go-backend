@@ -1,9 +1,10 @@
 module github.com/DRSN-tech/go-backend
 
-go 1.25.1
+go 1.24.5
 
 require (
 	github.com/avito-tech/go-transaction-manager/drivers/pgxv5/v2 v2.0.2
+	github.com/go-chi/chi/v5 v5.2.3
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
@@ -11,6 +12,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.97
 	github.com/qdrant/go-client v1.16.2
 	github.com/redis/go-redis/v9 v9.17.2
+	github.com/shopspring/decimal v1.4.0
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.10
 )
