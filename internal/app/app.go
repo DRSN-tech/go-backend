@@ -33,7 +33,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// FIXME: не пушить
 func Run() {
 	logger := logger.NewSlogLogger()
 
@@ -51,14 +50,16 @@ func Run() {
 		os.Exit(1)
 	}
 
-	catConv := pgdbConv.NewCategoryConverterImpl()
-	prConv := pgdbConv.NewProductConverterImpl()
-	infoConv := redisConv.NewProductInfoConverterImpl()
-	embConv := pgdbConv.NewProductEmbeddingVersionConverterImpl()
+	catConv := &pgdbConv.CategoryConverterImpl{}
+	prConv := &pgdbConv.ProductConverterImpl{}
+	infoConv := &redisConv.ProductInfoConverterImpl{}
+	embConv := &pgdbConv.ProductEmbeddingVersionConverterImpl{}
+	outbox := &pgdbConv.OutboxEventConverterImpl{}
 
 	productRepo := pgdb.NewProductRepo(db.Pool, prConv)
 	categoryRepo := pgdb.NewCategoryRepo(db.Pool, catConv)
 	prEmbeddingVersionRepo := pgdb.NewProductEmbeddingVersionRepo(db.Pool, embConv)
+	outboxRepo := pgdb.NewOutboxEventRepo(db.Pool, outbox)
 
 	minioClient, err := clients.NewMinIOClient(cfg)
 	if err != nil {
@@ -126,6 +127,11 @@ func Run() {
 		os.Exit(1)
 	}
 
+	outboxWorker := kafka.NewOutboxWorker(outboxRepo, logger, producer, db.Dsn)
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	outboxWorker.Start(workerCtx)
+	logger.Infof("Outbox worker started")
+
 	productUC := usecase.NewProductUC(
 		productRepo,
 		categoryRepo,
@@ -137,6 +143,7 @@ func Run() {
 		cacheRepo,
 		prEmbeddingVersionRepo,
 		producer,
+		outboxRepo,
 	)
 
 	grpcSrv := v1Grpc.NewGRPCServer(cfg.Grpc)
@@ -183,6 +190,11 @@ func Run() {
 	// === Graceful shutdown ===
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
+
+	logger.Infof("Stopping outbox worker...")
+	workerCancel()
+	outboxWorker.Stop() // без контекста — воркер сам обрабатывает остановку
+	logger.Infof("Outbox worker stopped")
 
 	if err := httpSrv.Stop(shutdownCtx); err != nil {
 		logger.Errorf(err, "HTTP server shutdown error")
