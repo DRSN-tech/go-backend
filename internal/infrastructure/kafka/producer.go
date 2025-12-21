@@ -48,7 +48,7 @@ func NewProducer(logger logger.Logger, cfg *cfg.KafkaCfg) (*Producer, error) {
 }
 
 func (p *Producer) WriteMessage(ctx context.Context, req *usecase.WriteMessageReq) error {
-	value, err := p.prepareProductChangeEvent(req.ProductID, req.Embeddings)
+	value, err := p.GetPayloadBytes(req)
 	if err != nil {
 		return e.Wrap(whereami.WhereAmI(), err)
 	}
@@ -56,6 +56,13 @@ func (p *Producer) WriteMessage(ctx context.Context, req *usecase.WriteMessageRe
 	return p.writer.WriteMessages(ctx, kafka.Message{
 		Key:   []byte(strconv.FormatInt(req.ProductID, 10)),
 		Value: value,
+	})
+}
+
+func (p *Producer) WriteRawMessage(ctx context.Context, req *usecase.WriteRawMessageReq) error {
+	return p.writer.WriteMessages(ctx, kafka.Message{
+		Key:   []byte(strconv.FormatInt(req.ProductID, 10)),
+		Value: req.Payload,
 	})
 }
 
@@ -97,11 +104,8 @@ func (p *Producer) Close() error {
 	return p.writer.Close()
 }
 
-func (p *Producer) prepareProductChangeEvent(
-	productID int64,
-	embeddings []domain.Embedding,
-) ([]byte, error) {
-	protoEmbeddings, err := toArrProtoEmbeddings(embeddings)
+func (p *Producer) GetPayloadBytes(req *usecase.WriteMessageReq) ([]byte, error) {
+	protoEmbeddings, err := toArrProtoEmbeddings(req.Embeddings)
 	if err != nil {
 		return nil, e.Wrap(whereami.WhereAmI(), err)
 	}
@@ -111,7 +115,7 @@ func (p *Producer) prepareProductChangeEvent(
 		EventTimestamp: time.Now().UnixNano(),
 		Operation: &drsnProto.ProductChangeEvent_Upsert{
 			Upsert: &drsnProto.UpsertEvent{
-				ProductId:  productID,
+				ProductId:  req.ProductID,
 				Embeddings: protoEmbeddings,
 			},
 		},
