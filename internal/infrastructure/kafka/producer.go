@@ -3,11 +3,10 @@ package kafka
 import (
 	"context"
 	"fmt"
-	"os"
 	"strconv"
-	"strings"
 	"time"
 
+	"github.com/DRSN-tech/go-backend/internal/cfg"
 	"github.com/DRSN-tech/go-backend/internal/domain"
 	drsnProto "github.com/DRSN-tech/go-backend/internal/proto"
 	"github.com/DRSN-tech/go-backend/internal/usecase"
@@ -22,24 +21,13 @@ import (
 type Producer struct {
 	writer *kafka.Writer
 	logger logger.Logger
+	cfg    *cfg.KafkaCfg
 }
 
-func NewProducer(logger logger.Logger) (*Producer, error) {
-	brokerStr := os.Getenv("KAFKA_BROKERS")
-	if brokerStr == "" {
-		return nil, fmt.Errorf("KAFKA_BROKERS environment variable is required")
-	}
-	brokers := strings.Split(brokerStr, ",")
-
-	topic := os.Getenv("KAFKA_TOPIC")
-
-	if topic == "" {
-		return nil, fmt.Errorf("KAFKA_TOPIC environment variable is required")
-	}
-
+func NewProducer(logger logger.Logger, cfg *cfg.KafkaCfg) (*Producer, error) {
 	writer := &kafka.Writer{
-		Addr:         kafka.TCP(brokers...),
-		Topic:        topic,
+		Addr:         kafka.TCP(cfg.Brokers...),
+		Topic:        cfg.Topic,
 		Balancer:     &kafka.Hash{},
 		RequiredAcks: kafka.RequireOne,
 		BatchSize:    10,
@@ -55,6 +43,7 @@ func NewProducer(logger logger.Logger) (*Producer, error) {
 	return &Producer{
 		writer: writer,
 		logger: logger,
+		cfg:    cfg,
 	}, nil
 }
 
@@ -68,6 +57,40 @@ func (p *Producer) WriteMessage(ctx context.Context, req *usecase.WriteMessageRe
 		Key:   []byte(strconv.FormatInt(req.ProductID, 10)),
 		Value: value,
 	})
+}
+
+func (p *Producer) EnsureTopic(timeout time.Duration) error {
+	conn, err := kafka.Dial(p.cfg.NetworkMode, p.cfg.Brokers[0])
+	if err != nil {
+		return e.Wrap(whereami.WhereAmI(), err)
+	}
+	defer conn.Close()
+
+	partitions, err := conn.ReadPartitions(p.cfg.Topic)
+	if err == nil && len(partitions) > 0 {
+		return nil
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		err := conn.CreateTopics(kafka.TopicConfig{
+			Topic:             p.cfg.Topic,
+			NumPartitions:     p.cfg.Partitions,
+			ReplicationFactor: p.cfg.ReplicationFactor,
+		})
+		done <- err
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			return e.Wrap(whereami.WhereAmI(), fmt.Errorf("failed to create topic %s: %w", p.cfg.Topic, err))
+		}
+		return nil
+	case <-time.After(timeout):
+		_ = conn.Close()
+		return e.Wrap(whereami.WhereAmI(), fmt.Errorf("timeout: %v, topic: %s", timeout, p.cfg.Topic))
+	}
 }
 
 func (p *Producer) Close() error {
