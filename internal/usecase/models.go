@@ -42,6 +42,11 @@ type ProductInfo struct {
 
 // INFRASTUCTURE
 
+type WriteMessageReq struct {
+	ProductID  int64
+	Embeddings []domain.Embedding
+}
+
 // VectorizeReq — запрос на векторизацию изображений.
 type VectorizeReq struct {
 	Images []ProductImage
@@ -142,4 +147,11 @@ func NewGetProductsRes(pr []ProductInfo, notFoundProducts []int64) *GetProductsR
 
 func NewGetProductsReq(ids []int64) *GetProductsReq {
 	return &GetProductsReq{ids}
+}
+
+func NewWriteMessageReq(productID int64, embeddings []domain.Embedding) *WriteMessageReq {
+	return &WriteMessageReq{
+		ProductID:  productID,
+		Embeddings: embeddings,
+	}
 }
