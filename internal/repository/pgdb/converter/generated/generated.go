@@ -6,13 +6,11 @@ package generated
 import (
 	domain "github.com/DRSN-tech/go-backend/internal/domain"
 	converter "github.com/DRSN-tech/go-backend/internal/repository/pgdb/converter"
+	usecase "github.com/DRSN-tech/go-backend/internal/usecase"
+	uuid "github.com/google/uuid"
 )
 
 type CategoryConverterImpl struct{}
-
-func NewCategoryConverterImpl() *CategoryConverterImpl {
-	return &CategoryConverterImpl{}
-}
 
 func (c *CategoryConverterImpl) ToEntity(source *converter.CategoryModel) *domain.Category {
 	var pDomainCategory *domain.Category
@@ -41,11 +39,69 @@ func (c *CategoryConverterImpl) ToModel(source *domain.Category) *converter.Cate
 	return pConverterCategoryModel
 }
 
-type ProductConverterImpl struct{}
+type OutboxEventConverterImpl struct{}
 
-func NewProductConverterImpl() *ProductConverterImpl {
-	return &ProductConverterImpl{}
+func (c *OutboxEventConverterImpl) ToArrEntity(source []*converter.OutboxEventModel) []*usecase.OutboxEvent {
+	var pUsecaseOutboxEventList []*usecase.OutboxEvent
+	if source != nil {
+		pUsecaseOutboxEventList = make([]*usecase.OutboxEvent, len(source))
+		for i := 0; i < len(source); i++ {
+			pUsecaseOutboxEventList[i] = c.ToEntity(source[i])
+		}
+	}
+	return pUsecaseOutboxEventList
 }
+func (c *OutboxEventConverterImpl) ToEntity(source *converter.OutboxEventModel) *usecase.OutboxEvent {
+	var pUsecaseOutboxEvent *usecase.OutboxEvent
+	if source != nil {
+		var usecaseOutboxEvent usecase.OutboxEvent
+		usecaseOutboxEvent.ID = (*source).ID
+		usecaseOutboxEvent.EventID = c.uuidUUIDToUuidUUID((*source).EventID)
+		usecaseOutboxEvent.ProductID = (*source).ProductID
+		usecaseOutboxEvent.EventType = converter.ConvertOutboxEventType((*source).EventType)
+		if (*source).Payload != nil {
+			usecaseOutboxEvent.Payload = make([]uint8, len((*source).Payload))
+			for i := 0; i < len((*source).Payload); i++ {
+				usecaseOutboxEvent.Payload[i] = (*source).Payload[i]
+			}
+		}
+		usecaseOutboxEvent.Status = converter.ConvertOutBoxStatus((*source).Status)
+		usecaseOutboxEvent.CreatedAt = converter.ConvertTime((*source).CreatedAt)
+		usecaseOutboxEvent.ProcessedAt = converter.ConvertPointerTime((*source).ProcessedAt)
+		pUsecaseOutboxEvent = &usecaseOutboxEvent
+	}
+	return pUsecaseOutboxEvent
+}
+func (c *OutboxEventConverterImpl) ToModel(source *usecase.OutboxEvent) *converter.OutboxEventModel {
+	var pConverterOutboxEventModel *converter.OutboxEventModel
+	if source != nil {
+		var converterOutboxEventModel converter.OutboxEventModel
+		converterOutboxEventModel.ID = (*source).ID
+		converterOutboxEventModel.EventID = c.uuidUUIDToUuidUUID((*source).EventID)
+		converterOutboxEventModel.ProductID = (*source).ProductID
+		converterOutboxEventModel.EventType = converter.ConvertOutboxEventType((*source).EventType)
+		if (*source).Payload != nil {
+			converterOutboxEventModel.Payload = make([]uint8, len((*source).Payload))
+			for i := 0; i < len((*source).Payload); i++ {
+				converterOutboxEventModel.Payload[i] = (*source).Payload[i]
+			}
+		}
+		converterOutboxEventModel.Status = converter.ConvertOutBoxStatus((*source).Status)
+		converterOutboxEventModel.CreatedAt = converter.ConvertTime((*source).CreatedAt)
+		converterOutboxEventModel.ProcessedAt = converter.ConvertPointerTime((*source).ProcessedAt)
+		pConverterOutboxEventModel = &converterOutboxEventModel
+	}
+	return pConverterOutboxEventModel
+}
+func (c *OutboxEventConverterImpl) uuidUUIDToUuidUUID(source uuid.UUID) uuid.UUID {
+	var uuidUUID uuid.UUID
+	for i := 0; i < len(source); i++ {
+		uuidUUID[i] = source[i]
+	}
+	return uuidUUID
+}
+
+type ProductConverterImpl struct{}
 
 func (c *ProductConverterImpl) ToEntity(source *converter.ProductModel) *domain.Product {
 	var pDomainProduct *domain.Product
@@ -79,10 +135,6 @@ func (c *ProductConverterImpl) ToModel(source *domain.Product) *converter.Produc
 }
 
 type ProductEmbeddingVersionConverterImpl struct{}
-
-func NewProductEmbeddingVersionConverterImpl() *ProductEmbeddingVersionConverterImpl {
-	return &ProductEmbeddingVersionConverterImpl{}
-}
 
 func (c *ProductEmbeddingVersionConverterImpl) ToEntity(source *converter.ProductEmbeddingVersionModel) *domain.ProductEmbeddingVersion {
 	var pDomainProductEmbeddingVersion *domain.ProductEmbeddingVersion
