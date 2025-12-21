@@ -12,6 +12,7 @@ import (
 	config "github.com/DRSN-tech/go-backend/internal/cfg"
 	v1Grpc "github.com/DRSN-tech/go-backend/internal/delivery/v1/grpc"
 	v1Http "github.com/DRSN-tech/go-backend/internal/delivery/v1/http"
+	"github.com/DRSN-tech/go-backend/internal/infrastructure/kafka"
 	minioInfra "github.com/DRSN-tech/go-backend/internal/infrastructure/minio"
 	ml_service "github.com/DRSN-tech/go-backend/internal/infrastructure/ml-service"
 	"github.com/DRSN-tech/go-backend/internal/proto"
@@ -113,6 +114,12 @@ func Run() {
 	ml := ml_service.NewMLService(mlClient, cfg.Ml, logger)
 	imagesInfra := minioInfra.NewMinioInfrastructure(imageRepo, cfg.Minio, logger)
 
+	producer, err := kafka.NewProducer(logger)
+	if err != nil {
+		logger.Errorf(err, "failed to initialize kafka producer")
+		os.Exit(1)
+	}
+
 	productUC := usecase.NewProductUC(
 		productRepo,
 		categoryRepo,
@@ -123,6 +130,7 @@ func Run() {
 		logger,
 		cacheRepo,
 		prEmbeddingVersionRepo,
+		producer,
 	)
 
 	grpcSrv := v1Grpc.NewGRPCServer(cfg.Grpc)
