@@ -25,7 +25,7 @@ type ImageRepository interface {
 }
 
 type EmbeddingRepository interface {
-	Upsert(ctx context.Context, vectors []domain.Embedding) error
+	Upsert(ctx context.Context, vectors []domain.Embedding) ([]domain.Embedding, error)
 }
 
 type CacheRepository interface {
