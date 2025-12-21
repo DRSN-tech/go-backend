@@ -91,16 +91,36 @@ services:
       - ml_models:/app/models
 
   kafka:
-    image: bitnami/kafka:latest
+    image: confluentinc/cp-kafka:8.1.0
     container_name: rvc-kafka
     ports:
       - "${KAFKA_PORT:-9092}:9092"
     env_file:
       - .env
     volumes:
-      - kafka_data:/bitnami/kafka
+      - kafka_data:/var/lib/kafka/data
     networks:
       - rvc-drsn.tech
+    healthcheck:
+      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: kafka-ui
+    ports:
+      - "${KAFKA_UI_PORT:-8086}:8080"
+    env_file:
+      - .env
+    networks:
+      - rvc-drsn.tech
+    depends_on:
+      kafka:
+        condition: service_healthy
     restart: unless-stopped
 
   app:
@@ -124,7 +144,7 @@ services:
       ml-service:
         condition: service_started
       kafka:
-        condition: service_started
+        condition: service_healthy
     networks:
       - rvc-drsn.tech
     restart: unless-stopped
