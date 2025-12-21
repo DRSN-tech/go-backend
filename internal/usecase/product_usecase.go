@@ -15,7 +15,7 @@ import (
 )
 
 // TODO: добавить кафку и версию продукта
-// ProductUseCase реализует бизнес-логику управления типами продуктов.
+// ProductUseCase реализует бизнес-логику управления продуктами.
 type ProductUseCase struct {
 	productRepo   ProductRepository
 	categoryRepo  CategoryRepository
@@ -26,6 +26,7 @@ type ProductUseCase struct {
 	logger        logger.Logger
 	cacheRepo     CacheRepository
 	prEmbVersRepo ProductEmbeddingVersionRepository
+	producer      MessageProducer
 }
 
 func NewProductUC(
@@ -38,6 +39,7 @@ func NewProductUC(
 	logger logger.Logger,
 	cacheRepo CacheRepository,
 	prEmbVersRepo ProductEmbeddingVersionRepository,
+	producer MessageProducer,
 ) *ProductUseCase {
 	return &ProductUseCase{
 		productRepo:   productRepo,
@@ -49,6 +51,7 @@ func NewProductUC(
 		logger:        logger,
 		cacheRepo:     cacheRepo,
 		prEmbVersRepo: prEmbVersRepo,
+		producer:      producer,
 	}
 }
 
@@ -114,6 +117,11 @@ func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProd
 			return e.Wrap(op, err)
 		}
 
+		// Удаляем из кэша ПОСЛЕ успешного коммита
+		if err := p.cacheRepo.DeleteProducts(ctx, []int64{upsertRes.Product.ID}); err != nil {
+			p.logger.Warnf("Failed to delete products from cache: %v", e.Wrap(op, err))
+		}
+
 		return nil
 	}
 
@@ -136,12 +144,14 @@ func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProd
 	}
 
 	// Сохранение векторов с дополнительной информацией (S3 key, Product ID, Created At, Model Version)
-	err = p.upsertEmbeddings(ctx, upsertRes.Product.ID, prEmbeddingVersion.EmbeddingVersion, imagesRes.ImagesKeys, vectors)
+	upsertEmbeddingsReq, err := p.upsertEmbeddings(ctx, upsertRes.Product.ID, prEmbeddingVersion.EmbeddingVersion, imagesRes.ImagesKeys, vectors)
 	if err != nil {
 		return e.Wrap(op, err)
 	}
 
-	// TODO: Task KAFKA-64
+	if err := p.producer.WriteMessage(ctx, NewWriteMessageReq(upsertRes.Product.ID, upsertEmbeddingsReq)); err != nil {
+		return e.Wrap(op, err)
+	}
 
 	// Коммит изменений в бд
 	err = tx.Commit(ctx)
@@ -261,15 +271,15 @@ func (p *ProductUseCase) uploadImages(ctx context.Context, name string, images [
 }
 
 // upsertEmbeddings сохраняет векторы изображений в Qdrant с привязкой к продукту и объектам MinIO.
-func (p *ProductUseCase) upsertEmbeddings(ctx context.Context, productID int64, embeddingVersion int32, imageKeys []string, vectors []VectorizeRes) error {
+func (p *ProductUseCase) upsertEmbeddings(ctx context.Context, productID int64, embeddingVersion int32, imageKeys []string, vectors []VectorizeRes) ([]domain.Embedding, error) {
 	if len(imageKeys) != len(vectors) {
-		return e.ErrImageVectorMismatch
+		return nil, e.ErrImageVectorMismatch
 	}
 
 	embeddings := make([]domain.Embedding, 0, len(imageKeys))
 	for i, key := range imageKeys {
 		if len(vectors[i].Vector) == 0 {
-			return e.ErrVectorEmbeddingEmpty
+			return nil, e.ErrVectorEmbeddingEmpty
 		}
 		payload := domain.NewPayload(productID, embeddingVersion, key, vectors[i].ModelVersion)
 		embeddings = append(embeddings, *domain.NewEmbedding(uuid.NewString(), vectors[i].Vector, payload))
