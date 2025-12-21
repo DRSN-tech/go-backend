@@ -24,7 +24,7 @@ func NewEmbeddingRepo(client *qdrant.Client, cfg *cfg.QdrantCfg) *EmbeddingRepo 
 }
 
 // Upsert сохраняет или обновляет embedding-векторы в указанной коллекции Qdrant.
-func (q *EmbeddingRepo) Upsert(ctx context.Context, vectors []domain.Embedding) error {
+func (q *EmbeddingRepo) Upsert(ctx context.Context, vectors []domain.Embedding) ([]domain.Embedding, error) {
 	reqVectors := make([]*qdrant.PointStruct, 0, len(vectors))
 	for _, vector := range vectors {
 		reqVectors = append(reqVectors, &qdrant.PointStruct{
@@ -39,8 +39,8 @@ func (q *EmbeddingRepo) Upsert(ctx context.Context, vectors []domain.Embedding) 
 		Points:         reqVectors,
 	})
 	if err != nil {
-		return e.Wrap(whereami.WhereAmI(), err)
+		return nil, e.Wrap(whereami.WhereAmI(), err)
 	}
 
-	return nil
+	return vectors, nil
 }

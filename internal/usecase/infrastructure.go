@@ -10,3 +10,7 @@ type ImagesInfra interface {
 	UploadImages(ctx context.Context, req *UploadImagesReq) (*UploadImagesRes, error)
 	CleanupImages(keys []string)
 }
+
+type MessageProducer interface {
+	WriteMessage(ctx context.Context, req *WriteMessageReq) error
+}

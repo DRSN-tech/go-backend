@@ -12,6 +12,7 @@ import (
 	config "github.com/DRSN-tech/go-backend/internal/cfg"
 	v1Grpc "github.com/DRSN-tech/go-backend/internal/delivery/v1/grpc"
 	v1Http "github.com/DRSN-tech/go-backend/internal/delivery/v1/http"
+	"github.com/DRSN-tech/go-backend/internal/infrastructure/kafka"
 	minioInfra "github.com/DRSN-tech/go-backend/internal/infrastructure/minio"
 	ml_service "github.com/DRSN-tech/go-backend/internal/infrastructure/ml-service"
 	"github.com/DRSN-tech/go-backend/internal/proto"
@@ -81,7 +82,7 @@ func Run() {
 		os.Exit(1)
 	}
 	qdrantCtx, qdrantCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	if err := clients.EnsureCollection(qdrantCtx, qdrantClient); err != nil {
+	if err := qdrantClient.EnsureCollection(qdrantCtx); err != nil {
 		qdrantCancel()
 		logger.Errorf(err, "failed to initialize qdrant")
 		os.Exit(1)
@@ -113,6 +114,18 @@ func Run() {
 	ml := ml_service.NewMLService(mlClient, cfg.Ml, logger)
 	imagesInfra := minioInfra.NewMinioInfrastructure(imageRepo, cfg.Minio, logger)
 
+	producer, err := kafka.NewProducer(logger, cfg.Kafka)
+	if err != nil {
+		logger.Errorf(err, "failed to initialize kafka producer")
+		os.Exit(1)
+	}
+
+	kafkaTimeout := 10 * time.Second
+	if err := producer.EnsureTopic(kafkaTimeout); err != nil {
+		logger.Errorf(err, "failed to initialize kafka producer")
+		os.Exit(1)
+	}
+
 	productUC := usecase.NewProductUC(
 		productRepo,
 		categoryRepo,
@@ -123,6 +136,7 @@ func Run() {
 		logger,
 		cacheRepo,
 		prEmbeddingVersionRepo,
+		producer,
 	)
 
 	grpcSrv := v1Grpc.NewGRPCServer(cfg.Grpc)
@@ -216,6 +230,12 @@ func Run() {
 
 	if db != nil {
 		db.Close()
+	}
+
+	if producer != nil {
+		if err := producer.Close(); err != nil {
+			logger.Warnf("Producer close error: %v", err)
+		}
 	}
 
 	logger.Infof("Application shutdown complete")

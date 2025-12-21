@@ -2,8 +2,10 @@ package cfg
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/DRSN-tech/go-backend/pkg/e"
@@ -19,6 +21,15 @@ type Config struct {
 	Qdrant *QdrantCfg
 	Redis  *RedisCfg
 	Ml     *MLServiceCfg
+	Kafka  *KafkaCfg
+}
+
+type KafkaCfg struct {
+	Topic             string
+	Brokers           []string
+	NetworkMode       string
+	Partitions        int
+	ReplicationFactor int
 }
 
 type MinIOCfg struct {
@@ -104,6 +115,11 @@ func Load(log logger.Logger) (*Config, error) {
 		return nil, e.Wrap(whereami.WhereAmI(), err)
 	}
 
+	kafka, err := loadKafkaCfg()
+	if err != nil {
+		return nil, e.Wrap(whereami.WhereAmI(), err)
+	}
+
 	return &Config{
 		Minio:  minio,
 		Http:   http,
@@ -112,6 +128,49 @@ func Load(log logger.Logger) (*Config, error) {
 		Qdrant: qdrant,
 		Redis:  redis,
 		Ml:     loadMLServiceCfg(),
+		Kafka:  kafka,
+	}, nil
+}
+
+func loadKafkaCfg() (*KafkaCfg, error) {
+	const (
+		defaultPartitions        = 3
+		defaultReplicationFactor = 1
+		defaultNetworkMode       = "tcp"
+	)
+
+	brokerStr := os.Getenv("KAFKA_BROKERS")
+	if brokerStr == "" {
+		return nil, fmt.Errorf("KAFKA_BROKERS environment variable is required")
+	}
+	brokers := strings.Split(brokerStr, ",")
+
+	log.Println(brokers) // todo: убрать
+
+	topic := os.Getenv("KAFKA_TOPIC")
+
+	if topic == "" {
+		return nil, fmt.Errorf("KAFKA_TOPIC environment variable is required")
+	}
+
+	partitions, err := parseIntEnv("KAFKA_PARTITIONS", defaultPartitions)
+	if err != nil {
+		return nil, e.Wrap("KAFKA_PARTITIONS", err)
+	}
+
+	replicationFactor, err := parseIntEnv("REPLICATION_FACTOR", defaultReplicationFactor)
+	if err != nil {
+		return nil, e.Wrap("REPLICATION_FACTOR", err)
+	}
+
+	networkMode := getEnvOrDefault("KAFKA_NETWORK_MODE", defaultNetworkMode)
+
+	return &KafkaCfg{
+		Brokers:           brokers,
+		Topic:             topic,
+		Partitions:        partitions,
+		ReplicationFactor: replicationFactor,
+		NetworkMode:       networkMode,
 	}, nil
 }
 
@@ -370,4 +429,18 @@ func parseDurationEnv(key string, defaultValue time.Duration) (time.Duration, er
 	}
 
 	return defaultValue, nil
+}
+
+func parseIntEnv(key string, defaultValue int) (int, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultValue, nil
+	}
+
+	intValue, err := strconv.Atoi(v)
+	if err != nil {
+		return defaultValue, e.ErrIncorrectEnvVariable
+	}
+
+	return intValue, nil
 }
