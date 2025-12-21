@@ -26,10 +26,17 @@ type ImageRepository interface {
 
 type EmbeddingRepository interface {
 	Upsert(ctx context.Context, vectors []domain.Embedding) ([]domain.Embedding, error)
+	Delete(ctx context.Context, vectors []domain.Embedding) error
 }
 
 type CacheRepository interface {
 	GetProducts(ctx context.Context, ids []int64) (map[int64]ProductInfo, error)
 	SetProducts(ctx context.Context, products []ProductInfo) error
 	DeleteProducts(ctx context.Context, ids []int64) error
+}
+
+type OutboxRepository interface {
+	Create(ctx context.Context, event *OutboxEvent) (*OutboxEvent, error)
+	GetAndMarkAsProcessing(ctx context.Context, limit int) ([]*OutboxEvent, error)
+	MarkAsProcessed(ctx context.Context, id int64) error
 }
