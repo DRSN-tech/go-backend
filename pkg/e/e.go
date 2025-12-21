@@ -6,7 +6,8 @@ import (
 
 var (
 	// 500 Internal Server Error
-	ErrInternalServerError = fmt.Errorf("internal server error")
+	ErrInternalServerError  = fmt.Errorf("internal server error")
+	ErrIncorrectEnvVariable = fmt.Errorf("incorrect environment variable")
 
 	// Транзакции
 	ErrTransactionNotFound = fmt.Errorf("transaction not found")
