@@ -124,7 +124,6 @@ func (m *MinioInfrastructure) cleanupUploadedKeys(keys []string) {
 	const op = "MinioInfrastructure.cleanupUploadedKeys"
 	m.logger.Infof("%s: Cleaning up uploaded keys", op)
 
-	// Создаём контекст с таймаутом на основе shutdownCtx
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
