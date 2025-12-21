@@ -90,6 +90,19 @@ services:
     volumes:
       - ml_models:/app/models
 
+  kafka:
+    image: bitnami/kafka:latest
+    container_name: rvc-kafka
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+    env_file:
+      - .env
+    volumes:
+      - kafka_data:/bitnami/kafka
+    networks:
+      - rvc-drsn.tech
+    restart: unless-stopped
+
   app:
     build:
       context: .
@@ -110,6 +123,8 @@ services:
         condition: service_healthy
       ml-service:
         condition: service_started
+      kafka:
+        condition: service_started
     networks:
       - rvc-drsn.tech
     restart: unless-stopped
@@ -124,3 +139,4 @@ volumes:
   qdrant_data:
   minio_data:
   ml_models:
+  kafka_data:
