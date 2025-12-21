@@ -27,6 +27,7 @@ type ProductUseCase struct {
 	cacheRepo     CacheRepository
 	prEmbVersRepo ProductEmbeddingVersionRepository
 	producer      MessageProducer
+	outboxRepo    OutboxRepository
 }
 
 func NewProductUC(
@@ -40,6 +41,7 @@ func NewProductUC(
 	cacheRepo CacheRepository,
 	prEmbVersRepo ProductEmbeddingVersionRepository,
 	producer MessageProducer,
+	outboxRepo OutboxRepository,
 ) *ProductUseCase {
 	return &ProductUseCase{
 		productRepo:   productRepo,
@@ -52,28 +54,30 @@ func NewProductUC(
 		cacheRepo:     cacheRepo,
 		prEmbVersRepo: prEmbVersRepo,
 		producer:      producer,
+		outboxRepo:    outboxRepo,
 	}
 }
 
 // AddNewProduct обрабатывает добавление нового продукта с изображениями, категорией, векторами и сохранением в хранилища.
-func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProductReq) error {
+func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProductReq) (*OutboxEvent, error) {
 	const op = "ProductUseCase.RegisterNewProduct"
 
 	// Валидация данных
 	var err error
 	err = p.validateProduct(req)
 	if err != nil && !errors.Is(err, e.ErrNoImages) {
-		return e.Wrap(op, err)
+		return nil, e.Wrap(op, err)
 	}
 
 	var (
-		imagesRes *UploadImagesRes
-		uploaded  bool
+		imagesRes  *UploadImagesRes
+		uploaded   bool
+		embeddings []domain.Embedding
 	)
 
 	ctx, tx, err := transaction.NewTransaction(ctx, pgx.TxOptions{}, p.dbPool)
 	if err != nil {
-		return e.Wrap(op, err)
+		return nil, e.Wrap(op, err)
 	}
 	// Если произошла ошибка, происходит Rollback транзакции и очистка загруженных изображений
 	defer func() {
@@ -91,6 +95,12 @@ func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProd
 
 				p.imagesInfra.CleanupImages(imagesRes.ImagesKeys)
 			}
+
+			if len(embeddings) > 0 {
+				if err := p.embeddingRepo.Delete(ctx, embeddings); err != nil {
+					p.logger.Warnf("Failed to cleunup Qdrant points %v", err)
+				}
+			}
 		}
 	}()
 	ctx = context.WithValue(ctx, "tx", tx.Transaction())
@@ -98,23 +108,23 @@ func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProd
 	// идемпотентное создание категории
 	category, err := p.createCategory(ctx, req.Name)
 	if err != nil {
-		return e.Wrap(op, err)
+		return nil, e.Wrap(op, err)
 	}
 
 	// идемпотентное создание продукта
 	upsertRes, err := p.upsertProduct(ctx, req.Name, req.Price, category.ID)
 	if err != nil {
-		return e.Wrap(op, err)
+		return nil, e.Wrap(op, err)
 	}
 
 	if req.Images == nil {
 		if upsertRes.NoChanges == true {
-			return e.Wrap(op, e.ErrNoChanges)
+			return nil, e.Wrap(op, e.ErrNoChanges)
 		}
 
 		err = tx.Commit(ctx)
 		if err != nil {
-			return e.Wrap(op, err)
+			return nil, e.Wrap(op, err)
 		}
 
 		// Удаляем из кэша ПОСЛЕ успешного коммита
@@ -122,41 +132,51 @@ func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProd
 			p.logger.Warnf("Failed to delete products from cache: %v", e.Wrap(op, err))
 		}
 
-		return nil
+		return nil, nil
 	}
 
 	// Отправка изображение на ML Service для получения векторов
 	vectors, err := p.getVectors(ctx, req.Images)
 	if err != nil {
-		return e.Wrap(op, err)
+		return nil, e.Wrap(op, err)
 	}
 
 	// Сохранение изображений в MinIO
 	imagesRes, err = p.uploadImages(ctx, req.Name, req.Images)
 	if err != nil {
-		return e.Wrap(op, err)
+		return nil, e.Wrap(op, err)
 	}
 	uploaded = true
 
 	prEmbeddingVersion, err := p.prEmbVersRepo.Upsert(ctx, upsertRes.Product.ID)
 	if err != nil {
-		return e.Wrap(op, err)
+		return nil, e.Wrap(op, err)
+	}
+
+	embeddings, err = p.getEmbeddings(ctx, upsertRes.Product.ID, prEmbeddingVersion.EmbeddingVersion, imagesRes.ImagesKeys, vectors)
+	if err != nil {
+		return nil, e.Wrap(op, err)
 	}
 
 	// Сохранение векторов с дополнительной информацией (S3 key, Product ID, Created At, Model Version)
-	upsertEmbeddingsReq, err := p.upsertEmbeddings(ctx, upsertRes.Product.ID, prEmbeddingVersion.EmbeddingVersion, imagesRes.ImagesKeys, vectors)
-	if err != nil {
-		return e.Wrap(op, err)
+	if _, err := p.upsertEmbeddings(ctx, embeddings); err != nil {
+		return nil, e.Wrap(op, err)
 	}
 
-	if err := p.producer.WriteMessage(ctx, NewWriteMessageReq(upsertRes.Product.ID, upsertEmbeddingsReq)); err != nil {
-		return e.Wrap(op, err)
+	outboxPayload, err := p.producer.GetPayloadBytes(NewWriteMessageReq(upsertRes.Product.ID, embeddings))
+	if err != nil {
+		return nil, e.Wrap(op, err)
+	}
+
+	event, err := p.outboxRepo.Create(ctx, NewOutboxEvent(uuid.New(), upsertRes.Product.ID, ProductEvent, outboxPayload))
+	if err != nil {
+		return nil, e.Wrap(op, err)
 	}
 
 	// Коммит изменений в бд
 	err = tx.Commit(ctx)
 	if err != nil {
-		return e.Wrap(op, err)
+		return nil, e.Wrap(op, err)
 	}
 
 	// Удаление из кэша старых данных товара
@@ -164,7 +184,7 @@ func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProd
 		p.logger.Warnf("Failed to delete products: %v", e.Wrap(op, err))
 	}
 
-	return nil
+	return event, nil
 }
 
 // GetProductsInfo возвращает информацию о продуктах по их идентификаторам.
@@ -271,7 +291,7 @@ func (p *ProductUseCase) uploadImages(ctx context.Context, name string, images [
 }
 
 // upsertEmbeddings сохраняет векторы изображений в Qdrant с привязкой к продукту и объектам MinIO.
-func (p *ProductUseCase) upsertEmbeddings(ctx context.Context, productID int64, embeddingVersion int32, imageKeys []string, vectors []VectorizeRes) ([]domain.Embedding, error) {
+func (p *ProductUseCase) getEmbeddings(ctx context.Context, productID int64, embeddingVersion int32, imageKeys []string, vectors []VectorizeRes) ([]domain.Embedding, error) {
 	if len(imageKeys) != len(vectors) {
 		return nil, e.ErrImageVectorMismatch
 	}
@@ -285,6 +305,10 @@ func (p *ProductUseCase) upsertEmbeddings(ctx context.Context, productID int64, 
 		embeddings = append(embeddings, *domain.NewEmbedding(uuid.NewString(), vectors[i].Vector, payload))
 	}
 
+	return embeddings, nil
+}
+
+func (p *ProductUseCase) upsertEmbeddings(ctx context.Context, embeddings []domain.Embedding) ([]domain.Embedding, error) {
 	return p.embeddingRepo.Upsert(ctx, embeddings)
 }
 
