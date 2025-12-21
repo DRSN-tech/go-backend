@@ -33,7 +33,9 @@ require (
 	github.com/minio/crc64nvme v1.1.0 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
+	github.com/pierrec/lz4/v4 v4.1.16 // indirect
 	github.com/rs/xid v1.6.0 // indirect
+	github.com/segmentio/kafka-go v0.4.49 // indirect
 	github.com/tinylib/msgp v1.3.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
