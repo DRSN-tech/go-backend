@@ -16,15 +16,6 @@ CREATE TABLE IF NOT EXISTS products(
     is_archived BOOLEAN DEFAULT false
 );
 
-CREATE TABLE IF NOT EXISTS product_embedding_version(
-    id BIGSERIAL PRIMARY KEY,
-    product_id BIGINT NOT NULL UNIQUE REFERENCES products(id) ON DELETE RESTRICT,
-    embedding_version INT NOT NULL DEFAULT 1,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP,
-    is_archived BOOLEAN DEFAULT false
-);
-
 -- outbox таблица, не нужна нормализованность для производительности
 CREATE TABLE outbox_events (
     id BIGSERIAL PRIMARY KEY,

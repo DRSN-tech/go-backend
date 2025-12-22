@@ -132,11 +132,6 @@ func toProtoEmbeddings(embedding domain.Embedding) (*drsnProto.Embedding, error)
 		return nil, e.Wrap(op, fmt.Errorf("missing or invalid product_id in payload"))
 	}
 
-	embeddingVersion, ok := embedding.Payload["embedding_version"].(int32)
-	if !ok {
-		return nil, e.Wrap(op, fmt.Errorf("missing or invalid embedding_version in payload"))
-	}
-
 	imagePath, ok := embedding.Payload["image_path"].(string)
 	if !ok {
 		return nil, e.Wrap(op, fmt.Errorf("missing or invalid image_path in payload"))
@@ -156,11 +151,10 @@ func toProtoEmbeddings(embedding domain.Embedding) (*drsnProto.Embedding, error)
 		EmbeddingId: embedding.ID,
 		Vector:      embedding.Vector,
 		Metadata: &drsnProto.EmbeddingMetadata{
-			ProductId:        productID,
-			EmbeddingVersion: embeddingVersion,
-			ImagePath:        imagePath,
-			CreatedAt:        createdAt,
-			ModelVersion:     modelVersion,
+			ProductId:    productID,
+			ImagePath:    imagePath,
+			CreatedAt:    createdAt,
+			ModelVersion: modelVersion,
 		},
 	}, nil
 }

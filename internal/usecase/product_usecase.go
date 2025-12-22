@@ -25,7 +25,6 @@ type ProductUseCase struct {
 	embeddingRepo EmbeddingRepository
 	logger        logger.Logger
 	cacheRepo     CacheRepository
-	prEmbVersRepo ProductEmbeddingVersionRepository
 	producer      MessageProducer
 	outboxRepo    OutboxRepository
 }
@@ -39,7 +38,6 @@ func NewProductUC(
 	embeddingRepo EmbeddingRepository,
 	logger logger.Logger,
 	cacheRepo CacheRepository,
-	prEmbVersRepo ProductEmbeddingVersionRepository,
 	producer MessageProducer,
 	outboxRepo OutboxRepository,
 ) *ProductUseCase {
@@ -52,7 +50,6 @@ func NewProductUC(
 		embeddingRepo: embeddingRepo,
 		logger:        logger,
 		cacheRepo:     cacheRepo,
-		prEmbVersRepo: prEmbVersRepo,
 		producer:      producer,
 		outboxRepo:    outboxRepo,
 	}
@@ -148,12 +145,7 @@ func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProd
 	}
 	uploaded = true
 
-	prEmbeddingVersion, err := p.prEmbVersRepo.Upsert(ctx, upsertRes.Product.ID)
-	if err != nil {
-		return nil, e.Wrap(op, err)
-	}
-
-	embeddings, err = p.getEmbeddings(ctx, upsertRes.Product.ID, prEmbeddingVersion.EmbeddingVersion, imagesRes.ImagesKeys, vectors)
+	embeddings, err = p.getEmbeddings(upsertRes.Product.ID, imagesRes.ImagesKeys, vectors)
 	if err != nil {
 		return nil, e.Wrap(op, err)
 	}
@@ -291,7 +283,7 @@ func (p *ProductUseCase) uploadImages(ctx context.Context, name string, images [
 }
 
 // upsertEmbeddings сохраняет векторы изображений в Qdrant с привязкой к продукту и объектам MinIO.
-func (p *ProductUseCase) getEmbeddings(ctx context.Context, productID int64, embeddingVersion int32, imageKeys []string, vectors []VectorizeRes) ([]domain.Embedding, error) {
+func (p *ProductUseCase) getEmbeddings(productID int64, imageKeys []string, vectors []VectorizeRes) ([]domain.Embedding, error) {
 	if len(imageKeys) != len(vectors) {
 		return nil, e.ErrImageVectorMismatch
 	}
@@ -301,7 +293,7 @@ func (p *ProductUseCase) getEmbeddings(ctx context.Context, productID int64, emb
 		if len(vectors[i].Vector) == 0 {
 			return nil, e.ErrVectorEmbeddingEmpty
 		}
-		payload := domain.NewPayload(productID, embeddingVersion, key, vectors[i].ModelVersion)
+		payload := domain.NewPayload(productID, key, vectors[i].ModelVersion)
 		embeddings = append(embeddings, *domain.NewEmbedding(uuid.NewString(), vectors[i].Vector, payload))
 	}
 
