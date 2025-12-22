@@ -27,16 +27,7 @@ type CategoryModel struct {
 	IsArchived bool       `db:"is_archived"`
 }
 
-// ProductEmbeddingVersionModel представляет запись таблицы product_embedding_version в PostgreSQL.
-type ProductEmbeddingVersionModel struct {
-	ID               int64      `db:"id"`
-	ProductID        int64      `db:"product_id"`
-	EmbeddingVersion int32      `db:"embedding_version"`
-	CreatedAt        time.Time  `db:"created_at"`
-	UpdatedAt        *time.Time `db:"updated_at"`
-	IsArchived       bool       `db:"is_archived"`
-}
-
+// OutboxEventModel представляет запись таблицы outbox_events в PostgreSQL.
 type OutboxEventModel struct {
 	ID                  int64                   `db:"id"`
 	EventID             uuid.UUID               `db:"event_id"`
