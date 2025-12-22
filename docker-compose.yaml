@@ -1,0 +1,162 @@
+services:
+  db:
+    image: postgres:17
+    container_name: rvc-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - rvc-drsn.tech
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    container_name: rvc-redis
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - rvc-drsn.tech
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_GRPC_PORT:-6334}:6334" # gRPC порт (внутренний:6334)
+      - "${QDRANT_PORT:-6333}:6333" # HTTP REST порт (внутренний:6333)
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - rvc-drsn.tech
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "${MINIO_API_PORT}:9000" # API порт для Go client
+      - "${MINIO_CONSOLE_PORT}:9001" # Web-консоль
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --address ":9000" --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/ready" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - rvc-drsn.tech
+    restart: unless-stopped
+
+  ml-service:
+    build:
+      context: ../ml-service # Путь к директории с Dockerfile для ML сервиса (по умолчанию на уровень выше текущей директории)
+    env_file:
+      - .env
+    environment:
+      - ML_PORT=${ML_PORT:-50051}
+      - DOWNLOAD_MODEL=true
+      - S3_ENDPOINT=${S3_ENDPOINT}
+      - S3_KEY=${S3_KEY}
+      - S3_SECRET=${S3_SECRET}
+      - S3_BUCKET=${S3_BUCKET}
+      - MODEL_OBJECT_KEY=${MODEL_OBJECT_KEY:-models/yolo11-seg.pt}
+      - MODEL_LOCAL_PATH=/app/models/yolo11-seg.pt
+      - YOLO_MODEL_PATH=/app/models/yolo11-seg.pt
+    ports:
+      - "${ML_PORT:-50051}:50051"
+    networks:
+      - rvc-drsn.tech
+    volumes:
+      - ml_models:/app/models
+
+  kafka:
+    image: confluentinc/cp-kafka:8.1.0
+    container_name: rvc-kafka
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+    env_file:
+      - .env
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - rvc-drsn.tech
+    healthcheck:
+      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: kafka-ui
+    ports:
+      - "${KAFKA_UI_PORT:-8086}:8080"
+    env_file:
+      - .env
+    networks:
+      - rvc-drsn.tech
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+    container_name: go_backend
+    ports:
+      - "${HTTP_PORT}:${HTTP_PORT}"
+      - "${GRPC_PORT}:${GRPC_PORT}"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      minio:
+        condition: service_healthy
+      ml-service:
+        condition: service_started
+      kafka:
+        condition: service_healthy
+    networks:
+      - rvc-drsn.tech
+    restart: unless-stopped
+
+networks:
+  rvc-drsn.tech:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+  minio_data:
+  ml_models:
+  kafka_data:
