@@ -67,6 +67,7 @@ func (c *OutboxEventConverterImpl) ToEntity(source *converter.OutboxEventModel) 
 		}
 		usecaseOutboxEvent.Status = converter.ConvertOutBoxStatus((*source).Status)
 		usecaseOutboxEvent.CreatedAt = converter.ConvertTime((*source).CreatedAt)
+		usecaseOutboxEvent.ProcessingStartedAt = converter.ConvertPointerTime((*source).ProcessingStartedAt)
 		usecaseOutboxEvent.ProcessedAt = converter.ConvertPointerTime((*source).ProcessedAt)
 		pUsecaseOutboxEvent = &usecaseOutboxEvent
 	}
@@ -88,6 +89,7 @@ func (c *OutboxEventConverterImpl) ToModel(source *usecase.OutboxEvent) *convert
 		}
 		converterOutboxEventModel.Status = converter.ConvertOutBoxStatus((*source).Status)
 		converterOutboxEventModel.CreatedAt = converter.ConvertTime((*source).CreatedAt)
+		converterOutboxEventModel.ProcessingStartedAt = converter.ConvertPointerTime((*source).ProcessingStartedAt)
 		converterOutboxEventModel.ProcessedAt = converter.ConvertPointerTime((*source).ProcessedAt)
 		pConverterOutboxEventModel = &converterOutboxEventModel
 	}
@@ -132,35 +134,4 @@ func (c *ProductConverterImpl) ToModel(source *domain.Product) *converter.Produc
 		pConverterProductModel = &converterProductModel
 	}
 	return pConverterProductModel
-}
-
-type ProductEmbeddingVersionConverterImpl struct{}
-
-func (c *ProductEmbeddingVersionConverterImpl) ToEntity(source *converter.ProductEmbeddingVersionModel) *domain.ProductEmbeddingVersion {
-	var pDomainProductEmbeddingVersion *domain.ProductEmbeddingVersion
-	if source != nil {
-		var domainProductEmbeddingVersion domain.ProductEmbeddingVersion
-		domainProductEmbeddingVersion.ID = (*source).ID
-		domainProductEmbeddingVersion.ProductID = (*source).ProductID
-		domainProductEmbeddingVersion.EmbeddingVersion = (*source).EmbeddingVersion
-		domainProductEmbeddingVersion.CreatedAt = converter.ConvertTime((*source).CreatedAt)
-		domainProductEmbeddingVersion.UpdatedAt = converter.ConvertPointerTime((*source).UpdatedAt)
-		domainProductEmbeddingVersion.IsArchived = (*source).IsArchived
-		pDomainProductEmbeddingVersion = &domainProductEmbeddingVersion
-	}
-	return pDomainProductEmbeddingVersion
-}
-func (c *ProductEmbeddingVersionConverterImpl) ToModel(source *domain.ProductEmbeddingVersion) *converter.ProductEmbeddingVersionModel {
-	var pConverterProductEmbeddingVersionModel *converter.ProductEmbeddingVersionModel
-	if source != nil {
-		var converterProductEmbeddingVersionModel converter.ProductEmbeddingVersionModel
-		converterProductEmbeddingVersionModel.ID = (*source).ID
-		converterProductEmbeddingVersionModel.ProductID = (*source).ProductID
-		converterProductEmbeddingVersionModel.EmbeddingVersion = (*source).EmbeddingVersion
-		converterProductEmbeddingVersionModel.CreatedAt = converter.ConvertTime((*source).CreatedAt)
-		converterProductEmbeddingVersionModel.UpdatedAt = converter.ConvertPointerTime((*source).UpdatedAt)
-		converterProductEmbeddingVersionModel.IsArchived = (*source).IsArchived
-		pConverterProductEmbeddingVersionModel = &converterProductEmbeddingVersionModel
-	}
-	return pConverterProductEmbeddingVersionModel
 }

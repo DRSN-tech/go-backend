@@ -53,12 +53,10 @@ func Run() {
 	catConv := &pgdbConv.CategoryConverterImpl{}
 	prConv := &pgdbConv.ProductConverterImpl{}
 	infoConv := &redisConv.ProductInfoConverterImpl{}
-	embConv := &pgdbConv.ProductEmbeddingVersionConverterImpl{}
 	outbox := &pgdbConv.OutboxEventConverterImpl{}
 
 	productRepo := pgdb.NewProductRepo(db.Pool, prConv)
 	categoryRepo := pgdb.NewCategoryRepo(db.Pool, catConv)
-	prEmbeddingVersionRepo := pgdb.NewProductEmbeddingVersionRepo(db.Pool, embConv)
 	outboxRepo := pgdb.NewOutboxEventRepo(db.Pool, outbox)
 
 	minioClient, err := clients.NewMinIOClient(cfg)
@@ -141,7 +139,6 @@ func Run() {
 		embRepo,
 		logger,
 		cacheRepo,
-		prEmbeddingVersionRepo,
 		producer,
 		outboxRepo,
 	)
