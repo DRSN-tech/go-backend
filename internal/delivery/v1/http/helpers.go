@@ -52,6 +52,8 @@ func ToHTTPResponse(err error) (int, string) {
 		return http.StatusBadRequest, e.ErrNoImages.Error()
 	case errors.Is(err, e.ErrNoChanges):
 		return http.StatusBadRequest, e.ErrNoChanges.Error()
+	case errors.Is(err, e.ErrUnsupportedMediaType):
+		return http.StatusBadRequest, e.ErrUnsupportedMediaType.Error()
 	default:
 		return http.StatusInternalServerError, e.ErrInternalServerError.Error()
 	}
