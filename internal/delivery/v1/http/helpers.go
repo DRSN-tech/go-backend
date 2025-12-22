@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"strings"
@@ -150,6 +151,9 @@ func parseImages(files []*multipart.FileHeader) ([]usecase.ProductImage, error) 
 	if len(files) == 0 {
 		return nil, e.ErrNoImages
 	}
+
+	log.Println("DEBUG len(files):", len(files))
+
 	if len(files) > maxImageCount {
 		return nil, e.ErrTooManyImages
 	}
@@ -162,6 +166,11 @@ func parseImages(files []*multipart.FileHeader) ([]usecase.ProductImage, error) 
 		}
 		images = append(images, *usecase.NewProductImage(data, mimeType, int64(len(data)), fh.Filename))
 	}
+
+	for _, image := range images {
+		log.Println("DEBUG image:", image.Name)
+	}
+
 	return images, nil
 }
 
@@ -176,6 +185,7 @@ func readFile(fh *multipart.FileHeader, maxSize int64) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", e.ErrInternalServerError
 	}
+
 	if int64(len(data)) > maxSize {
 		return nil, "", e.Wrap(fh.Filename, e.ErrFileTooLarge)
 	}
