@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/DRSN-tech/go-backend/internal/domain"
+	"github.com/DRSN-tech/go-backend/internal/usecase"
 )
 
 // ProductConverter преобразует сущности Product между domain и моделью PostgreSQL.
@@ -25,7 +26,7 @@ type CategoryConverter interface {
 	ToEntity(model *CategoryModel) *domain.Category
 }
 
-// CategoryConverter преобразует сущности ProductEmbeddingVersion между domain и моделью PostgreSQL.
+// ProductEmbeddingVersionConverter преобразует сущности ProductEmbeddingVersion между domain и моделью PostgreSQL.
 // goverter:converter
 // goverter:extend ConvertTime
 // goverter:extend ConvertPointerTime
@@ -34,10 +35,30 @@ type ProductEmbeddingVersionConverter interface {
 	ToEntity(model *ProductEmbeddingVersionModel) *domain.ProductEmbeddingVersion
 }
 
+// OutboxEventConverter преобразует сущности OutboxEvent между usecase и моделью PostgreSQL.
+// goverter:converter
+// goverter:extend ConvertTime
+// goverter:extend ConvertPointerTime
+// goverter:extend ConvertOutBoxStatus
+// goverter:extend ConvertOutboxEventType
+type OutboxEventConverter interface {
+	ToModel(entity *usecase.OutboxEvent) *OutboxEventModel
+	ToEntity(model *OutboxEventModel) *usecase.OutboxEvent
+	ToArrEntity(models []*OutboxEventModel) []*usecase.OutboxEvent
+}
+
 func ConvertPointerTime(t *time.Time) *time.Time {
 	return t
 }
 
 func ConvertTime(t time.Time) time.Time {
+	return t
+}
+
+func ConvertOutBoxStatus(s usecase.OutboxStatus) usecase.OutboxStatus {
+	return s
+}
+
+func ConvertOutboxEventType(t usecase.OutboxEventType) usecase.OutboxEventType {
 	return t
 }

@@ -20,12 +20,12 @@ import (
 // PgDatabase инкапсулирует подключение к PostgreSQL и управление миграциями.
 type PgDatabase struct {
 	Pool *pgxpool.Pool // TODO: проверить надо ли делать это поле публичным
-	dsn  string
+	Dsn  string
 	cfg  *cfg.PGDBCfg
 }
 
 func NewPgDatabase(pool *pgxpool.Pool, cfg *cfg.PGDBCfg, dsn string) *PgDatabase {
-	return &PgDatabase{Pool: pool, cfg: cfg, dsn: dsn}
+	return &PgDatabase{Pool: pool, cfg: cfg, Dsn: dsn}
 }
 
 // Connect устанавливает соединение с PostgreSQL.
@@ -84,7 +84,7 @@ func (db *PgDatabase) RunMigrations(logger logger.Logger) error {
 		sourceURL          = "file://db/migrations"
 	)
 
-	sqlDb, err := sql.Open(driverName, db.dsn)
+	sqlDb, err := sql.Open(driverName, db.Dsn)
 	if err != nil {
 		return err
 	}

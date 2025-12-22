@@ -10,10 +10,6 @@ import (
 
 type ProductInfoConverterImpl struct{}
 
-func NewProductInfoConverterImpl() *ProductInfoConverterImpl {
-	return &ProductInfoConverterImpl{}
-}
-
 func (c *ProductInfoConverterImpl) ToArrRedisModel(source []usecase.ProductInfo) []converter.ProductInfoRedisModel {
 	var converterProductInfoRedisModelList []converter.ProductInfoRedisModel
 	if source != nil {

@@ -1,6 +1,11 @@
 package usecase
 
-import "github.com/DRSN-tech/go-backend/internal/domain"
+import (
+	"time"
+
+	"github.com/DRSN-tech/go-backend/internal/domain"
+	"github.com/google/uuid"
+)
 
 // TODO: Task REFACTORING-49
 // PRODUCT USECASE
@@ -42,9 +47,41 @@ type ProductInfo struct {
 
 // INFRASTUCTURE
 
+type OutboxStatus string
+
+const (
+	Pending    OutboxStatus = "pending"
+	Failed     OutboxStatus = "failed"
+	Processed  OutboxStatus = "processed"
+	Processing OutboxStatus = "processing"
+)
+
+type OutboxEventType string
+
+const (
+	ProductEvent OutboxEventType = "product_event"
+)
+
+type OutboxEvent struct {
+	ID                  int64
+	EventID             uuid.UUID
+	ProductID           int64
+	EventType           OutboxEventType
+	Payload             []byte
+	Status              OutboxStatus
+	CreatedAt           time.Time
+	ProcessingStartedAt *time.Time
+	ProcessedAt         *time.Time
+}
+
 type WriteMessageReq struct {
 	ProductID  int64
 	Embeddings []domain.Embedding
+}
+
+type WriteRawMessageReq struct {
+	ProductID int64
+	Payload   []byte
 }
 
 // VectorizeReq — запрос на векторизацию изображений.
@@ -153,5 +190,23 @@ func NewWriteMessageReq(productID int64, embeddings []domain.Embedding) *WriteMe
 	return &WriteMessageReq{
 		ProductID:  productID,
 		Embeddings: embeddings,
+	}
+}
+
+func NewWriteRawMessageReq(productID int64, payload []byte) *WriteRawMessageReq {
+	return &WriteRawMessageReq{
+		ProductID: productID,
+		Payload:   payload,
+	}
+}
+
+func NewOutboxEvent(eventID uuid.UUID, productID int64, eventType OutboxEventType, payload []byte) *OutboxEvent {
+	return &OutboxEvent{
+		EventID:   eventID,
+		ProductID: productID,
+		EventType: eventType,
+		Payload:   payload,
+		Status:    Pending,
+		CreatedAt: time.Now(),
 	}
 }

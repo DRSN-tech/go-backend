@@ -49,13 +49,20 @@ func (p *ProductHandler) registerNewProduct(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	if err := p.productUsecase.RegisterNewProduct(r.Context(), usecase.NewAddNewProductReq(prMeta.Name, prMeta.CategoryName, prMeta.Price, images)); err != nil {
+	event, err := p.productUsecase.RegisterNewProduct(r.Context(), usecase.NewAddNewProductReq(prMeta.Name, prMeta.CategoryName, prMeta.Price, images))
+	if err != nil {
 		p.logger.Warnf("%s", err.Error())
 		WriteError(w, err)
 		return
 	}
 
-	WriteSuccess(w, http.StatusOK, map[string]interface{}{
-		"Success": true,
-	})
+	if event != nil {
+		WriteSuccess(w, http.StatusCreated, map[string]interface{}{
+			"EventID": event.EventID,
+		})
+	} else {
+		WriteSuccess(w, http.StatusOK, map[string]interface{}{
+			"Changed": true,
+		})
+	}
 }

@@ -1,6 +1,11 @@
 package converter
 
-import "time"
+import (
+	"time"
+
+	"github.com/DRSN-tech/go-backend/internal/usecase"
+	"github.com/google/uuid"
+)
 
 // ProductModel представляет запись таблицы product_types в PostgreSQL.
 type ProductModel struct {
@@ -30,4 +35,16 @@ type ProductEmbeddingVersionModel struct {
 	CreatedAt        time.Time  `db:"created_at"`
 	UpdatedAt        *time.Time `db:"updated_at"`
 	IsArchived       bool       `db:"is_archived"`
+}
+
+type OutboxEventModel struct {
+	ID                  int64                   `db:"id"`
+	EventID             uuid.UUID               `db:"event_id"`
+	ProductID           int64                   `db:"product_id"`
+	EventType           usecase.OutboxEventType `db:"event_type"`
+	Payload             []byte                  `db:"payload"`
+	Status              usecase.OutboxStatus    `db:"status"`
+	CreatedAt           time.Time               `db:"created_at"`
+	ProcessingStartedAt *time.Time              `db:"processing_started_at"`
+	ProcessedAt         *time.Time              `db:"processed_at"`
 }

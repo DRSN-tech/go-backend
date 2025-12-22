@@ -13,4 +13,6 @@ type ImagesInfra interface {
 
 type MessageProducer interface {
 	WriteMessage(ctx context.Context, req *WriteMessageReq) error
+	GetPayloadBytes(req *WriteMessageReq) ([]byte, error)
+	WriteRawMessage(ctx context.Context, req *WriteRawMessageReq) error
 }
