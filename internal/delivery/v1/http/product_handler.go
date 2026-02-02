@@ -19,6 +19,20 @@ func NewProductHandler(productUsecase usecase.ProductUC, logger logger.Logger) *
 }
 
 // TODO: добавить логи
+// registerNewProduct
+//
+//	@Summary		Регистрация нового товара
+//	@Description	Создает новый товар в каталоге с изображениями
+//	@Tags			products
+//	@Accept			multipart/form-data
+//	@Produce		json
+//	@Param			name			formData	string					true	"Название товара"
+//	@Param			category_name	formData	string					true	"Категория"
+//	@Param			price			formData	number					true	"Цена"
+//	@Param			images			formData	file					true	"Изображения товара"
+//	@Success		201				{object}	map[string]interface{}	"Успешное создание"
+//	@Failure		400				{object}	map[string]interface{}	"Ошибка валидации"
+//	@Router			/products [post]
 func (p *ProductHandler) registerNewProduct(w http.ResponseWriter, r *http.Request) {
 	const (
 		maxTotalRequestSize = 150 << 20
