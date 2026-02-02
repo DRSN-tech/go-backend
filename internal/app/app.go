@@ -24,251 +24,315 @@ import (
 	redisConv "github.com/DRSN-tech/go-backend/internal/repository/redis/converter/generated"
 	"github.com/DRSN-tech/go-backend/internal/usecase"
 	"github.com/DRSN-tech/go-backend/pkg/clients"
+	"github.com/DRSN-tech/go-backend/pkg/closer"
 	"github.com/DRSN-tech/go-backend/pkg/e"
 	"github.com/DRSN-tech/go-backend/pkg/logger"
 	"github.com/DRSN-tech/go-backend/pkg/postgres"
 	"github.com/go-chi/chi/v5"
 	"github.com/jimlawless/whereami"
+	"github.com/minio/minio-go/v7"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-func Run() {
-	logger := logger.NewSlogLogger()
+// App представляет приложение со всеми зависимостями.
+type App struct {
+	logger logger.Logger
+	closer *closer.Closer
+	cfg    *config.Config
 
-	cfg, err := config.Load(logger)
-	if err != nil {
-		logger.Errorf(err, "failed to load config")
-		os.Exit(1)
+	// Clients
+	db           *postgres.PgDatabase
+	redisClient  *clients.RedisClient
+	qdrantClient *clients.QdrantClient
+	minioClient  *minio.Client
+	grpcConn     *grpc.ClientConn
+	producer     *kafka.Producer
+
+	// Infrastructure
+	imagesInfra  *minioInfra.MinioInfrastructure
+	outboxWorker *kafka.OutboxWorker
+	workerCancel context.CancelFunc
+
+	// Servers
+	httpSrv *v1Http.Server
+	grpcSrv *v1Grpc.GRPCServer
+}
+
+// NewApp создает и инициализирует все компоненты приложения.
+func NewApp(cfg *config.Config, log logger.Logger) (*App, error) {
+	a := &App{
+		logger: log,
+		closer: closer.NewCloser(5 * time.Second),
+		cfg:    cfg,
 	}
 
-	logger.Infof("minio endpoint: %s", cfg.Minio.MinioEndpoint) // TODO: удалить
-
-	db, err := initPGDB(logger, cfg)
-	if err != nil {
-		logger.Errorf(err, "failed to initialize database")
-		os.Exit(1)
+	if err := a.initDatabase(); err != nil {
+		return nil, err
+	}
+	if err := a.initMinio(); err != nil {
+		return nil, err
+	}
+	if err := a.initQdrant(); err != nil {
+		return nil, err
+	}
+	if err := a.initRedis(); err != nil {
+		return nil, err
+	}
+	if err := a.initGRPCClient(); err != nil {
+		return nil, err
+	}
+	if err := a.initKafka(); err != nil {
+		return nil, err
+	}
+	if err := a.initServers(); err != nil {
+		return nil, err
 	}
 
-	catConv := &pgdbConv.CategoryConverterImpl{}
-	prConv := &pgdbConv.ProductConverterImpl{}
-	infoConv := &redisConv.ProductInfoConverterImpl{}
-	outbox := &pgdbConv.OutboxEventConverterImpl{}
+	return a, nil
+}
 
-	productRepo := pgdb.NewProductRepo(db.Pool, prConv)
-	categoryRepo := pgdb.NewCategoryRepo(db.Pool, catConv)
-	outboxRepo := pgdb.NewOutboxEventRepo(db.Pool, outbox)
-
-	minioClient, err := clients.NewMinIOClient(cfg)
-	if err != nil {
-		logger.Errorf(err, "failed to initialize minio client")
-		os.Exit(1)
-	}
-
-	minioCtx, minioCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	if err := clients.EnsureBucket(minioCtx, minioClient, cfg.Minio.BucketName); err != nil {
-		minioCancel()
-		logger.Errorf(err, "failed to initialize MinIO bucket")
-		os.Exit(1)
-	}
-	minioCancel()
-
-	imageRepo := s3Repo.NewImageRepo(minioClient, cfg.Minio)
-
-	qdrantClient, err := clients.NewQdrantClient(cfg.Qdrant)
-	if err != nil {
-		logger.Errorf(err, "failed to initialize qdrant")
-		os.Exit(1)
-	}
-	qdrantCtx, qdrantCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	if err := qdrantClient.EnsureCollection(qdrantCtx); err != nil {
-		qdrantCancel()
-		logger.Errorf(err, "failed to initialize qdrant")
-		os.Exit(1)
-	}
-	qdrantCancel()
-
-	embRepo := qdrantRepo.NewEmbeddingRepo(qdrantClient.Client, cfg.Qdrant)
-
-	redisClient := clients.NewRedisClient(cfg.Redis)
-	redisCtx, redisCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer redisCancel()
-	if err := redisClient.Ping(redisCtx); err != nil {
-		logger.Errorf(err, "failed to connect to redis")
-		os.Exit(1)
-	}
-	cacheRepo := redis.NewCacheRepo(redisClient, infoConv, cfg.Redis, logger)
-
-	conn, err := grpc.NewClient(
-		cfg.Ml.Addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()), // явное указание gRPC-клиенту использовать НЕзащищённое соединение (без TLS).
-	)
-	if err != nil {
-		logger.Errorf(err, "failed to initialize grpc client")
-		os.Exit(1)
-	}
-	defer conn.Close()
-
-	mlClient := proto.NewMachineLearningServiceClient(conn)
-	ml := ml_service.NewMLService(mlClient, cfg.Ml, logger)
-	imagesInfra := minioInfra.NewMinioInfrastructure(imageRepo, cfg.Minio, logger)
-
-	producer, err := kafka.NewProducer(logger, cfg.Kafka)
-	if err != nil {
-		logger.Errorf(err, "failed to initialize kafka producer")
-		os.Exit(1)
-	}
-
-	kafkaTimeout := 10 * time.Second
-	if err := producer.EnsureTopic(kafkaTimeout); err != nil {
-		logger.Errorf(err, "failed to initialize kafka producer")
-		os.Exit(1)
-	}
-
-	outboxWorker := kafka.NewOutboxWorker(outboxRepo, logger, producer, db.Dsn)
-	workerCtx, workerCancel := context.WithCancel(context.Background())
-	outboxWorker.Start(workerCtx)
-	logger.Infof("Outbox worker started")
-
-	productUC := usecase.NewProductUC(
-		productRepo,
-		categoryRepo,
-		db.Pool,
-		ml,
-		imagesInfra,
-		embRepo,
-		logger,
-		cacheRepo,
-		producer,
-		outboxRepo,
-	)
-
-	grpcSrv := v1Grpc.NewGRPCServer(cfg.Grpc)
-	grpcSrv.RegisterServices(productUC, logger)
-
+// Run запускает HTTP и gRPC серверы и ожидает сигнала завершения.
+func (a *App) Run() error {
 	grpcErrCh := make(chan error, 1)
 	go func() {
-		logger.Infof("gRPC server starting on %s:%s", cfg.Grpc.NetworkMode, cfg.Grpc.Port)
-		if err := grpcSrv.Start(); err != nil {
-			logger.Errorf(err, "gRPC server failed")
+		a.logger.Infof("gRPC server starting on %s:%s", a.cfg.Grpc.NetworkMode, a.cfg.Grpc.Port)
+		if err := a.grpcSrv.Start(); err != nil {
+			a.logger.Errorf(err, "gRPC server failed")
 			grpcErrCh <- err
 		}
 	}()
 
-	r := chi.NewRouter()
-	router := v1Http.NewRouter(r, logger)
-	router.Init(productUC)
-
-	httpSrv := v1Http.NewServer(r, cfg.Http)
-
-	errCh := make(chan error, 1)
+	httpErrCh := make(chan error, 1)
 	go func() {
-		logger.Infof("HTTP server started on port %s", cfg.Http.Port)
-		if err := httpSrv.Run(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Errorf(err, "HTTP server failed: %v", err)
-			errCh <- err
+		a.logger.Infof("HTTP server started on port %s", a.cfg.Http.Port)
+		if err := a.httpSrv.Run(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			a.logger.Errorf(err, "HTTP server failed")
+			httpErrCh <- err
 		}
 	}()
 
-	// === Ожидание сигнала или ошибки ===
 	shutdown := make(chan os.Signal, 1)
 	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
 
 	var appErr error
 	select {
-	case appErr = <-errCh:
-		logger.Errorf(appErr, "HTTP server fatal error")
+	case appErr = <-httpErrCh:
+		a.logger.Errorf(appErr, "HTTP server fatal error")
 	case appErr = <-grpcErrCh:
-		logger.Errorf(appErr, "gRPC server fatal error")
+		a.logger.Errorf(appErr, "gRPC server fatal error")
 	case <-shutdown:
-		logger.Infof("Received shutdown signal, stopping gracefully...")
+		a.logger.Infof("Received shutdown signal, stopping gracefully...")
 	}
 
-	// === Graceful shutdown ===
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer shutdownCancel()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
-	logger.Infof("Stopping outbox worker...")
-	workerCancel()
-	outboxWorker.Stop() // без контекста — воркер сам обрабатывает остановку
-	logger.Infof("Outbox worker stopped")
-
-	if err := httpSrv.Stop(shutdownCtx); err != nil {
-		logger.Errorf(err, "HTTP server shutdown error")
+	if err := a.Shutdown(shutdownCtx); err != nil {
+		a.logger.Errorf(err, "shutdown completed with errors")
 	} else {
-		logger.Infof("HTTP server stopped")
+		a.logger.Infof("Application shutdown complete")
 	}
 
-	if err := grpcSrv.Stop(shutdownCtx); err != nil {
-		if !errors.Is(err, context.DeadlineExceeded) {
-			logger.Errorf(err, "gRPC server shutdown error")
-		} else {
-			logger.Warnf("gRPC server shutdown timeout")
-		}
-	} else {
-		logger.Infof("gRPC server stopped")
-	}
-
-	done := make(chan error, 1)
-	go func() {
-		done <- imagesInfra.WaitForCleanup(shutdownCtx) // internal cleanup, без таймаута
-	}()
-
-	select {
-	case err := <-done:
-		if err != nil {
-			logger.Warnf("MinIO cleanup error: %v", err)
-		} else {
-			logger.Infof("MinIO cleanup completed")
-		}
-	case <-time.After(5 * time.Second): // локальный таймаут ожидания cleanup
-		logger.Warnf("MinIO cleanup did not finish before shutdown, some temporary objects may remain")
-	}
-
-	if qdrantClient != nil {
-		if err := qdrantClient.Client.Close(); err != nil {
-			logger.Warnf("Qdrant close error: %v", err)
-		}
-	}
-
-	if redisClient != nil {
-		if err := redisClient.Client.Close(); err != nil {
-			logger.Warnf("Redis close error: %v", err)
-		}
-	}
-
-	if db != nil {
-		db.Close()
-	}
-
-	if producer != nil {
-		if err := producer.Close(); err != nil {
-			logger.Warnf("Producer close error: %v", err)
-		}
-	}
-
-	logger.Infof("Application shutdown complete")
-	if appErr != nil {
-		os.Exit(1)
-	}
+	return appErr
 }
 
-func initPGDB(logger logger.Logger, cfg *config.Config) (*postgres.PgDatabase, error) {
-	db, err := postgres.Connect(cfg.Db)
+// Shutdown корректно останавливает все компоненты приложения.
+func (a *App) Shutdown(ctx context.Context) error {
+	return a.closer.Close(ctx)
+}
+
+func (a *App) initDatabase() error {
+	db, err := postgres.Connect(a.cfg.Db)
 	if err != nil {
-		logger.Errorf(err, "failed to connect to database")
-		return nil, e.Wrap(whereami.WhereAmI(), err)
+		a.logger.Errorf(err, "failed to connect to database")
+		return e.Wrap(whereami.WhereAmI(), err)
 	}
 
-	if err := db.RunMigrations(logger); err != nil {
-		logger.Errorf(err, "failed to run migrations")
-		return nil, e.Wrap(whereami.WhereAmI(), err)
+	if err := db.RunMigrations(a.logger); err != nil {
+		a.logger.Errorf(err, "failed to run migrations")
+		return e.Wrap(whereami.WhereAmI(), err)
 	}
 
 	if err := db.Ping(); err != nil {
-		logger.Errorf(err, "failed to ping database")
-		return nil, e.Wrap(whereami.WhereAmI(), err)
+		a.logger.Errorf(err, "failed to ping database")
+		return e.Wrap(whereami.WhereAmI(), err)
 	}
 
-	return db, nil
+	a.db = db
+	a.closer.Add(func(ctx context.Context) error {
+		a.db.Close()
+		return nil
+	})
+
+	return nil
+}
+
+func (a *App) initMinio() error {
+	client, err := clients.NewMinIOClient(a.cfg)
+	if err != nil {
+		a.logger.Errorf(err, "failed to initialize minio client")
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := clients.EnsureBucket(ctx, client, a.cfg.Minio.BucketName); err != nil {
+		a.logger.Errorf(err, "failed to initialize MinIO bucket")
+		return err
+	}
+
+	a.minioClient = client
+	return nil
+}
+
+func (a *App) initQdrant() error {
+	client, err := clients.NewQdrantClient(a.cfg.Qdrant)
+	if err != nil {
+		a.logger.Errorf(err, "failed to initialize qdrant")
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := client.EnsureCollection(ctx); err != nil {
+		a.logger.Errorf(err, "failed to initialize qdrant collection")
+		return err
+	}
+
+	a.qdrantClient = client
+	a.closer.Add(func(ctx context.Context) error {
+		return a.qdrantClient.Client.Close()
+	})
+
+	return nil
+}
+
+func (a *App) initRedis() error {
+	client := clients.NewRedisClient(a.cfg.Redis)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := client.Ping(ctx); err != nil {
+		a.logger.Errorf(err, "failed to connect to redis")
+		return err
+	}
+
+	a.redisClient = client
+	a.closer.Add(func(ctx context.Context) error {
+		return a.redisClient.Client.Close()
+	})
+
+	return nil
+}
+
+func (a *App) initGRPCClient() error {
+	conn, err := grpc.NewClient(
+		a.cfg.Ml.Addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		a.logger.Errorf(err, "failed to initialize grpc client")
+		return err
+	}
+
+	a.grpcConn = conn
+	a.closer.Add(func(ctx context.Context) error {
+		return a.grpcConn.Close()
+	})
+
+	return nil
+}
+
+func (a *App) initKafka() error {
+	producer, err := kafka.NewProducer(a.logger, a.cfg.Kafka)
+	if err != nil {
+		a.logger.Errorf(err, "failed to initialize kafka producer")
+		return err
+	}
+
+	if err := producer.EnsureTopic(10 * time.Second); err != nil {
+		a.logger.Errorf(err, "failed to ensure kafka topic")
+		return err
+	}
+
+	a.producer = producer
+	a.closer.Add(func(ctx context.Context) error {
+		return a.producer.Close()
+	})
+
+	return nil
+}
+
+func (a *App) initServers() error {
+	// Converters
+	catConv := &pgdbConv.CategoryConverterImpl{}
+	prConv := &pgdbConv.ProductConverterImpl{}
+	infoConv := &redisConv.ProductInfoConverterImpl{}
+	outboxConv := &pgdbConv.OutboxEventConverterImpl{}
+
+	// Repositories
+	productRepo := pgdb.NewProductRepo(a.db.Pool, prConv)
+	categoryRepo := pgdb.NewCategoryRepo(a.db.Pool, catConv)
+	outboxRepo := pgdb.NewOutboxEventRepo(a.db.Pool, outboxConv)
+	imageRepo := s3Repo.NewImageRepo(a.minioClient, a.cfg.Minio)
+	embRepo := qdrantRepo.NewEmbeddingRepo(a.qdrantClient.Client, a.cfg.Qdrant)
+	cacheRepo := redis.NewCacheRepo(a.redisClient, infoConv, a.cfg.Redis, a.logger)
+
+	// Infrastructure
+	mlClient := proto.NewMachineLearningServiceClient(a.grpcConn)
+	ml := ml_service.NewMLService(mlClient, a.cfg.Ml, a.logger)
+
+	a.imagesInfra = minioInfra.NewMinioInfrastructure(imageRepo, a.cfg.Minio, a.logger)
+	a.closer.Add(func(ctx context.Context) error {
+		return a.imagesInfra.WaitForCleanup(ctx)
+	})
+
+	// Outbox worker
+	a.outboxWorker = kafka.NewOutboxWorker(outboxRepo, a.logger, a.producer, a.db.Dsn)
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	a.workerCancel = workerCancel
+	a.outboxWorker.Start(workerCtx)
+	a.logger.Infof("Outbox worker started")
+
+	a.closer.Add(func(ctx context.Context) error {
+		a.workerCancel()
+		a.outboxWorker.Stop()
+		return nil
+	})
+
+	// Use case
+	productUC := usecase.NewProductUC(
+		productRepo,
+		categoryRepo,
+		a.db.Pool,
+		ml,
+		a.imagesInfra,
+		embRepo,
+		a.logger,
+		cacheRepo,
+		a.producer,
+		outboxRepo,
+	)
+
+	// gRPC Server
+	a.grpcSrv = v1Grpc.NewGRPCServer(a.cfg.Grpc)
+	a.grpcSrv.RegisterServices(productUC, a.logger)
+	a.closer.Add(func(ctx context.Context) error {
+		return a.grpcSrv.Stop(ctx)
+	})
+
+	// HTTP Server
+	r := chi.NewRouter()
+	router := v1Http.NewRouter(r, a.logger)
+	router.Init(productUC)
+	a.httpSrv = v1Http.NewServer(r, a.cfg.Http)
+	a.closer.Add(func(ctx context.Context) error {
+		return a.httpSrv.Stop(ctx)
+	})
+
+	return nil
 }

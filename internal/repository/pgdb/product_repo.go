@@ -25,7 +25,7 @@ func NewProductRepo(pool *pgxpool.Pool, conv converter.ProductConverter) *Produc
 	}
 }
 
-// Upsert идемпотентно создаёт или обновляет продукт по уникальному имени,
+// Upsert создаёт или обновляет продукт по уникальному имени,
 // Запись обновляется только при изменении цены или категории.
 func (p *ProductRepo) Upsert(ctx context.Context, product *domain.Product) (*usecase.UpsertProductRes, error) {
 	tx, err := tr.TxFromCtx(ctx)

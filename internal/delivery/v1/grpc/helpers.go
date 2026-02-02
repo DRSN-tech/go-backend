@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// GRPCErrorResponse формирует ошибку для gRPC
 func GRPCErrorResponse(err error) error {
 	switch {
 	case errors.Is(err, e.ErrNoProducts):
