@@ -22,7 +22,6 @@ func Duration(d time.Duration, jitterFactor float64) time.Duration {
 	randMutex.Lock()
 	jitter := globalRand.Float64() * jitterFactor * float64(d)
 	randMutex.Unlock()
-	
 	return d + time.Duration(jitter)
 }
 
@@ -46,6 +45,5 @@ func ExponentialBackoff(base, max time.Duration, attempt int, jitterFactor float
 			break
 		}
 	}
-
 	return Duration(backoff, jitterFactor)
 }
