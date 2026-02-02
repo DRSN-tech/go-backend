@@ -75,7 +75,7 @@ services:
       - .env
     environment:
       - ML_PORT=${ML_PORT:-50051}
-      - DOWNLOAD_MODEL=true
+      - DOWNLOAD_MODEL=false # Значение true, если нужно скачивать модель из S3
       - S3_ENDPOINT=${S3_ENDPOINT}
       - S3_KEY=${S3_KEY}
       - S3_SECRET=${S3_SECRET}
@@ -88,7 +88,10 @@ services:
     networks:
       - rvc-drsn.tech
     volumes:
-      - ml_models:/app/models
+      # Если DOWNLOAD_MODEL=false, то модель должна быть скачана вручную директорию
+      # Например ../ml-service/app/models:/app/models 
+      # Или можно использовать ml_models:/app/models, если вы хотите использовать volume
+      - ../ml-service/app/models:/app/models 
 
   kafka:
     image: confluentinc/cp-kafka:8.1.0

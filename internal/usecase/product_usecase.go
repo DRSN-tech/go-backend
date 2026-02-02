@@ -55,7 +55,7 @@ func NewProductUC(
 	}
 }
 
-// AddNewProduct обрабатывает добавление нового продукта с изображениями, категорией, векторами и сохранением в хранилища.
+// RegisterNewProduct обрабатывает добавление нового продукта с изображениями, категорией, векторами и сохранением в хранилища.
 func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProductReq) (*OutboxEvent, error) {
 	const op = "ProductUseCase.RegisterNewProduct"
 
@@ -102,13 +102,11 @@ func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProd
 	}()
 	ctx = context.WithValue(ctx, "tx", tx.Transaction())
 
-	// идемпотентное создание категории
 	category, err := p.createCategory(ctx, req.Name)
 	if err != nil {
 		return nil, e.Wrap(op, err)
 	}
 
-	// идемпотентное создание продукта
 	upsertRes, err := p.upsertProduct(ctx, req.Name, req.Price, category.ID)
 	if err != nil {
 		return nil, e.Wrap(op, err)
@@ -116,6 +114,7 @@ func (p *ProductUseCase) RegisterNewProduct(ctx context.Context, req *AddNewProd
 
 	if req.Images == nil {
 		if upsertRes.NoChanges == true {
+			p.logger.Debugf("%s: images %")
 			return nil, e.Wrap(op, e.ErrNoChanges)
 		}
 
@@ -282,7 +281,7 @@ func (p *ProductUseCase) uploadImages(ctx context.Context, name string, images [
 	return p.imagesInfra.UploadImages(ctx, NewUploadImagesReq(name, images))
 }
 
-// upsertEmbeddings сохраняет векторы изображений в Qdrant с привязкой к продукту и объектам MinIO.
+// getEmbeddings генерирует []domain.Embedding
 func (p *ProductUseCase) getEmbeddings(productID int64, imageKeys []string, vectors []VectorizeRes) ([]domain.Embedding, error) {
 	if len(imageKeys) != len(vectors) {
 		return nil, e.ErrImageVectorMismatch
