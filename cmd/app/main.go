@@ -8,6 +8,11 @@ import (
 	"github.com/DRSN-tech/go-backend/pkg/logger"
 )
 
+// @title			Retail Vision API
+// @version		1.0
+// @description	API сервис для распознавания товаров и управления каталогом.
+// @host			localhost:8080
+// @BasePath		/api/v1
 func main() {
 	log := logger.NewSlogLogger()
 
