@@ -14,6 +14,7 @@ require (
 	github.com/redis/go-redis/v9 v9.17.2
 	github.com/segmentio/kafka-go v0.4.49
 	github.com/shopspring/decimal v1.4.0
+	github.com/swaggo/http-swagger/v2 v2.0.2
 	github.com/swaggo/swag v1.16.6
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.10
@@ -48,6 +49,7 @@ require (
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.16 // indirect
 	github.com/rs/xid v1.6.0 // indirect
+	github.com/swaggo/files/v2 v2.0.0 // indirect
 	github.com/tinylib/msgp v1.3.0 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect

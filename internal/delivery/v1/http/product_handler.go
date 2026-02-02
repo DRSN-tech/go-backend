@@ -31,7 +31,7 @@ func NewProductHandler(productUsecase usecase.ProductUC, logger logger.Logger) *
 //	@Param			price			formData	number					true	"Цена"
 //	@Param			images			formData	file					true	"Изображения товара"
 //	@Success		201				{object}	map[string]interface{}	"Успешное создание"
-//	@Failure		400				{object}	map[string]interface{}	"Ошибка валидации"
+//	@Failure		400				{object}	ErrorResponse	"Ошибка валидации"
 //	@Router			/products [post]
 func (p *ProductHandler) registerNewProduct(w http.ResponseWriter, r *http.Request) {
 	const (
