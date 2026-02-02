@@ -1,0 +1,58 @@
+basePath: /api/v1
+definitions:
+  http.ErrorResponse:
+    properties:
+      code:
+        type: integer
+      message:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: API сервис для распознавания товаров и управления каталогом.
+  title: Retail Vision API
+  version: "1.0"
+paths:
+  /products:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Создает новый товар в каталоге с изображениями
+      parameters:
+      - description: Название товара
+        in: formData
+        name: name
+        required: true
+        type: string
+      - description: Категория
+        in: formData
+        name: category_name
+        required: true
+        type: string
+      - description: Цена
+        in: formData
+        name: price
+        required: true
+        type: number
+      - description: Изображения товара
+        in: formData
+        name: images
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Успешное создание
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Ошибка валидации
+          schema:
+            $ref: '#/definitions/http.ErrorResponse'
+      summary: Регистрация нового товара
+      tags:
+      - products
+swagger: "2.0"
